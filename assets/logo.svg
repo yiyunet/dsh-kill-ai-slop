@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Kill AI Slop">
+  <title>AI垃圾过滤 / Kill AI Slop</title>
+  <!-- 漏斗：进的是文件，出的是结论。用 currentColor 跟随宿主主题。 -->
+  <path d="M8 10h48L38 34v18l-12 6V34L8 10z"
+        fill="none" stroke="currentColor" stroke-width="3.2"
+        stroke-linejoin="round" opacity="0.9"/>
+  <!-- 三道筛网：水分 → 空转 → 结论 -->
+  <path d="M17.5 19.5h29" stroke="currentColor" stroke-width="2" opacity="0.45" stroke-linecap="round"/>
+  <path d="M21.5 26h21" stroke="currentColor" stroke-width="2" opacity="0.6" stroke-linecap="round"/>
+  <path d="M26 32.5h12" stroke="currentColor" stroke-width="2" opacity="0.75" stroke-linecap="round"/>
+  <!-- 出口的一滴"干"：方形=结论，不是圆=不是概率 -->
+  <rect x="28.5" y="40" width="7" height="7" rx="1.6" fill="currentColor" opacity="0.85"/>
+</svg>

@@ -1,0 +1,24 @@
+# dsh-kill-ai-slop · 仓库忽略规则
+
+# ── 依赖与本地运行态 ──
+node_modules/
+.cache/
+
+# ── 打包与日志产物 ──
+*.tgz
+*.log
+
+# ── 编辑器 / 系统垃圾 ──
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# ── ⚠️ lib/ 故意**不**忽略 ──
+# 构建产物随仓库一起入库，理由两条：
+#   ① clone 下来即可直接 `dsh plugin add`，不必先跑一次构建；
+#   ② 发布包里的 lib/ 与仓库里的 lib/ 是同一份，可逐字节审计。
+# 唯一真源仍是 plugin-src/：`npm run build` 会用 plugin-src/ 原子覆盖 lib/。
+# 改 lib/ 里的文件会被下一次构建冲掉 —— 要改就改 plugin-src/。
