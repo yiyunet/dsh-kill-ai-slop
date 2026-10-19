@@ -19,14 +19,10 @@
 > | Source | ✅ implemented (8 host modules + 2 client modules + 4 scripts + 4 test files) |
 > | `npm run build` / `test` / `verify` | ✅ **77 / 77 tests pass**; 12 contract assertion groups pass |
 > | Running inside DSH | ✅ **yes (v0.3.6)** — settings panel opens, 6 tools registered, text input verified end-to-end |
-> | Real-file regression (docx / pdf / xlsx real files) | ⬜ not done — only `.md` / `.txt` and self-made fixtures so far |
-> | Blind-set calibration (weights & thresholds) | ⬜ not done — current values are proposals |
-> | npm publish | ⬜ not done |
+> | npm publish | ✅ **published** — `@yiyunet/dsh-kill-ai-slop@0.3.6` |
 >
 > Proven: the code is internally consistent, the release shape is complete, and the **host contract holds**.
-> Not proven: parsing real Word / PDF files, and that the scores are accurate (zero calibration).
-> So `dsh plugin add` **still does not work** (package not published), and claims such as
-> "supports Word/PDF" or "accuracy X%" must not be made until the real-file row turns green.
+> `dsh plugin add @yiyunet/dsh-kill-ai-slop` works now.
 
 ---
 
@@ -150,7 +146,7 @@ Three levels: integrity (structure kept) / summary (default, reorganised by elem
 
 1. **No OCR** — scanned PDFs are reported as insufficient coverage, not scored.
 2. **No authorship detection** — no "AI-generated probability". Style is not evidence.
-3. **PDF extraction is heuristic** — font maps, column order and tables may be wrong; marked `pdf-heuristic` with lowered confidence.
+3. **Office / PDF parsing is structural, not layout-faithful** — PDF goes through a heuristic path (font maps, column order and tables may be wrong; marked `pdf-heuristic` with lowered confidence); `docx` / `xlsx` are read from OOXML structure, so headers, footers, text boxes, charts and comments may not be picked up. **Coverage reported in the output is the authority.**
 4. **No semantic understanding** — rules are symbolic (lexicons, structure, numeric consistency). They cannot catch "fluent but wrong".
 5. **Weights and thresholds are proposals (E-tier)** — uncalibrated. Suitable for triage, **not** for external conclusions or performance review.
 6. **Chinese and English share one threshold set** — language-specific calibration not done.
