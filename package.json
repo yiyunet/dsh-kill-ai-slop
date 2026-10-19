@@ -1,7 +1,7 @@
 {
   "name": "@yiyunet/dsh-kill-ai-slop",
-  "version": "0.3.6",
-  "description": "DSH 插件：AI垃圾过滤（Kill AI Slop）——对收到的文件做表达水分体检（AI Slop：套话、重复、模板化、模糊等没有信息量的表达填充），并用「交付承接台账」审查工作空转（Work Slop：把本该完成的决策与执行组织转嫁给接收者）：义务逐条记账、引文逐条复核。零依赖、零联网、纯本地计算，附设置面板。 Score documents for AI-slop and audit work-slop with an obligation ledger whose every quote is machine-verified against the source, then distill them into five faithful elements. Fully offline, zero runtime dependencies, with a settings panel.",
+  "version": "0.3.7",
+  "description": "DSH 插件：AI垃圾过滤（Kill AI Slop）——给收到的文件打一个可回溯的体检得分（表达／执行／决策三维加权），用交付承接台账审查工作空转，每条引文回原文机器复核。零依赖、零联网、纯本地计算。Score a document for AI-slop and work-slop with a quote-verified obligation ledger.",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -77,13 +77,14 @@
       "platform": "web"
     },
     "compatibility": {
-      "dsh": "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1",
+      "dsh": "0.1.2-alpha.4 || 0.1.2-alpha.5 || 0.1.2-rc.1 || 0.1.3-alpha.1 || 0.1.5-alpha.1 || 0.2.1-rc.2",
       "dshReleases": {
         "0.1.2-alpha.4": "compatible",
         "0.1.2-alpha.5": "compatible",
         "0.1.2-rc.1": "compatible",
         "0.1.3-alpha.1": "compatible",
-        "0.1.5-alpha.1": "compatible"
+        "0.1.5-alpha.1": "compatible",
+        "0.2.1-rc.2": "compatible"
       },
       "profiles": [
         "web"

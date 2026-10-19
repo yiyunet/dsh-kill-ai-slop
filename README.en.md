@@ -18,8 +18,8 @@
 > |---|---|
 > | Source | ✅ implemented (8 host modules + 2 client modules + 4 scripts + 4 test files) |
 > | `npm run build` / `test` / `verify` | ✅ **77 / 77 tests pass**; 12 contract assertion groups pass |
-> | Running inside DSH | ✅ **yes (v0.3.6)** — settings panel opens, 6 tools registered, text input verified end-to-end |
-> | npm publish | ✅ **published** — `@yiyunet/dsh-kill-ai-slop@0.3.6` |
+> | Running inside DSH | ✅ **yes** — settings panel opens, 6 tools registered, text input verified end-to-end |
+> | npm publish | ✅ **published** — `@yiyunet/dsh-kill-ai-slop` |
 >
 > Proven: the code is internally consistent, the release shape is complete, and the **host contract holds**.
 > `dsh plugin add @yiyunet/dsh-kill-ai-slop` works now.
@@ -33,13 +33,13 @@ The two words in the name are the two starting points of the scoring
 
 | Term | What it means | Index here |
 |---|---|---|
-| **AI Slop** | Text that looks like content but carries none: filler, repetition, templated phrasing, vagueness, structural noise | Expression bloat (A) |
-| **Work Slop** | Pushing the thinking and the tidying that should have been done onto the reader: no purpose, no evidence, no owner, no deadline | Work offloading (B, primary) |
+| **AI Slop** | Text that looks like content but carries none: filler, repetition, templated phrasing, vagueness, structural noise | Expression (A) — 20% |
+| **Work Slop** | Pushing the thinking and the tidying that should have been done onto the reader: no purpose, no evidence, no owner, no deadline | Execution (C) + Decision (D) — 80% |
 
 What they share: **neither asks "who wrote it" — both ask "how much effort does this file push onto you."**
 That is why this plugin guesses no author and reports no "AI probability".
 
-> Why B is primary: a terse but fact-rich report is merely *not pretty*;
+> Why execution and decision carry 80%: a terse but fact-rich report is merely *not pretty*;
 > a proposal with no purpose, no support and no owner gets sent back for rework —
 > **that is the real cost.**
 
@@ -52,14 +52,17 @@ Most tools hand you one number: *"87% likely AI-written."* Two problems:
 - **Style is not evidence of authorship.** A hollow human-written doc and a high-quality AI-assisted technical report can both "not sound like a person".
 - **It answers the wrong question.** You want to know *can I use this file*, not *who wrote it*.
 
-So this plugin reports two separate indices, both 0–100 (higher = worse), neither a probability:
+So this plugin reports **one** auditable score, 0–100 (higher = worse) — never a probability, and never a guess about authorship:
 
 | Index | Question | Dimensions |
 |---|---|---|
-| **Expression bloat (A)** | How much reading cost produced no information | filler, repetition, templates, vagueness, useless structure |
-| **Work offloading (B)** | Did the author push the thinking onto you | purpose, substance, support, consistency, decision support, execution |
+| **Expression (A)** — weight 20 | How much reading cost produced no information | filler, repetition, templates, vagueness, useless structure |
+| **Execution (C)** — weight 40 | Does the deliverable say who does what, by when, in what shape | owners, deadlines, next-step form |
+| **Decision (D)** — weight 40 | Does the deliverable say what was chosen, what was dropped, and on what evidence | options, trade-offs, basis |
 
-**B is the primary index; A is secondary. They are never averaged.** A terse but fact-rich technical report must not be judged bad for "not reading like prose".
+**The three are weighted into a single 体检得分 (0–100, higher = worse).** Execution and decision carry 80% because this plugin targets *work slop*, not prose style — a terse but fact-rich technical report must not be judged bad for "not reading like prose".
+
+> Weights `20 / 40 / 40` are **provisional and uncalibrated**. A steering wheel, not a ruler for performance reviews.
 
 ---
 
