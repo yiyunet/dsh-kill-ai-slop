@@ -16,6 +16,69 @@
 
 ## [Unreleased]
 
+## [0.3.8] — 2026-10-19
+
+> 规则集版本**仍** `slop-rules/0.3.2` —— 本版不改任何判定，只改**安装形态**与文档。
+
+第一次有员工在**桌面客户端**里装本插件，装到一半就失败了：
+
+```
+[ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED] The git-hosted package
+"@yiyunet/dsh-kill-ai-slop@0.3.7" needs to execute build scripts
+but is not in the "allowBuilds" allowlist.
+```
+
+### F72 `prepare` 把「clone 即可装」这条设计废掉了
+
+`package.json` 声明了 `"prepare": "node scripts/build.mjs"`。
+而 `.gitignore` 里明写着 `lib/` **故意不忽略**，理由是
+「clone 下来即可直接 `dsh plugin add`，不必先跑一次构建」。
+
+两条互相打架：既然产物已入库，git 安装本就不需要构建；可 `prepare` 偏偏在 git 安装时
+**强制跑构建**，撞上 pnpm 10+ 的构建脚本审批门，整包装不上。
+
+**修法：删掉 `prepare`。** 两条路径都不需要它：
+
+- 从 npm 装 —— registry tarball 里已有 `lib/`，本来就不跑 `prepare`；
+- 发布 —— `prepublishOnly: npm run check` 已经含 `build`。
+
+### F73 守着「安装失败」的那道断言，门开在 `prepare` 上
+
+`scripts/verify-package.mjs` ⑨ 的禁令只列 `preinstall` / `install` / `postinstall`，
+**提示语还写着「构建自动化用 prepare」** —— 教人用那个正在炸的钩子。
+
+现在禁令到四，并写明真实错误码与出路。`prepack` 疑为同类，未实测，注释里标了不要用。
+
+### README 安装节：按形态分两种
+
+原来只有一行 `dsh plugin add @yiyunet/dsh-kill-ai-slop`，两个问题：
+
+- **漏了 `--profile`** —— 它是 `dsh plugin` 的必填项，照抄会报
+  `required option '--profile <name>' not specified`；
+- **没提两个 profile 互不可见** —— 桌面客户端占的是保留 profile `desktop`，
+  由客户端自己管理，与浏览器 GUI 的 `web` 在包、启用状态、锁文件上三者独立。
+
+现在拆成「① 浏览器 GUI / ② 桌面客户端」，并写明：**填包名，不要填 GitHub 地址**。中英同步。
+
+### 状态表数字对齐实测（发布前最后一轮核对）
+
+`npm run check` 实测与文档对不上，三处都是旧数字：
+
+| 项 | 文档原写 | 实测 |
+|---|---|---|
+| `npm test` | 77 / 77 | **120 / 120** |
+| `lib/` 落盘 | 9 个文件 | **10 个**（9 宿主 + `client.js`） |
+| 宿主模块 | 8 个 | **9 个**（多出 `obligations.mjs`） |
+| 测试文件 | 4 个 | **5 个**（多出 `obligations.test.mjs`） |
+
+另有一处直接**撤掉**：`verify` 的条目数。它先后被写成 10 / 11 / 12，三个说法都不对，
+而每加一条断言就要手改三处文档 —— 这不是数字写错，是**把可变的量抄成了静态事实**。
+现在只写「发布契约校验全过」，具体清单看 `verify` 自己的输出。
+
+### 未改
+
+`RULESET_VERSION` 停在 `slop-rules/0.3.2`：本版没有改动任何判定语义或权重。
+
 ## [0.3.7] — 2026-10-19
 
 > 规则集版本**仍** `slop-rules/0.3.2` —— 本版只动文案、元数据与对外表述，判定一个没改。

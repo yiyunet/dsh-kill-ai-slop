@@ -16,13 +16,48 @@
 >
 > | Item | State |
 > |---|---|
-> | Source | ✅ implemented (8 host modules + 2 client modules + 4 scripts + 4 test files) |
-> | `npm run build` / `test` / `verify` | ✅ **77 / 77 tests pass**; 12 contract assertion groups pass |
+> | Source | ✅ implemented (9 host modules + 2 client modules + 4 scripts + 5 test files) |
+> | `npm run build` / `test` / `verify` | ✅ **120 / 120 tests pass**; release-contract check passes |
 > | Running inside DSH | ✅ **yes** — settings panel opens, 6 tools registered, text input verified end-to-end |
 > | npm publish | ✅ **published** — `@yiyunet/dsh-kill-ai-slop` |
 >
 > Proven: the code is internally consistent, the release shape is complete, and the **host contract holds**.
-> `dsh plugin add @yiyunet/dsh-kill-ai-slop` works now.
+
+---
+
+## Install
+
+Where it lands depends on **how you open DSH**. The two are independent — installing into one does not show up in the other.
+
+### ① Browser GUI (`dsh web` / `dsh --profile web`)
+
+```sh
+dsh plugin --profile web add @yiyunet/dsh-kill-ai-slop
+```
+
+### ② Desktop client
+
+**Do not use the command above.** The desktop app ships its own runtime; plugins land in the reserved
+`$DSH_HOME/profiles/desktop` and are managed by the client itself — install by package name from its plugin window.
+
+Give it the **package name** `@yiyunet/dsh-kill-ai-slop`, not a GitHub URL: a git source requires the host
+to run the package's build script, which hardened environments refuse outright
+(`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`).
+
+### Confirm it loaded
+
+Either way, check `cordis.patch.yml` (the package patch normally injects it):
+
+```yaml
+- insert:
+    - id: kill-ai-slop
+      name: '@yiyunet/dsh-kill-ai-slop'
+```
+
+Restart the Host → open **Settings** → **AI垃圾过滤** appears on the left.
+
+> The build output `lib/` is committed to this repository, so **an npm install needs no build step**.
+> A git install does require running `scripts/build.mjs`, which most managed environments do not allow — hence npm.
 
 ---
 

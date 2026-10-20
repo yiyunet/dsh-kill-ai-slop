@@ -131,7 +131,7 @@ Work Slop 是「任务要求 − 实际交付」的差，两个操作数。一�
 1. 改 `plugin-src/host/rules.mjs` 里的词表/阈值 → 升 `RULESET_VERSION`
 2. 跑 `npm run build`（产物必须重建）
 3. 跑 `npm test`（单测直接测 `plugin-src/`，不是测 `lib/`）
-4. 跑 `npm run verify`（十一条契约断言）
+4. 跑 `npm run verify`（发布契约校验）
 5. 更新 `CHANGELOG.md` 的「已知限制」——**新增能力要写上限，不写上限等于过度承诺**
 
 ## 绝对不要做的事
@@ -139,7 +139,9 @@ Work Slop 是「任务要求 − 实际交付」的差，两个操作数。一�
 - ❌ 输出"AI 生成概率 X%""疑似 AI 撰写" —— 文风不是作者身份的证据
 - ❌ 用这个分数做员工绩效/转正评价 —— 同一份文件在不用用途下分数本就该不同
 - ❌ 在 `package.json` 里加 `dependencies` —— 会打破零依赖承诺，且 verify 会红
-- ❌ 声明 `postinstall` / `install` / `preinstall` —— pnpm 10+ 会拦，消费者安装直接失败
+- ❌ 声明 `postinstall` / `install` / `preinstall` / `prepare` —— pnpm 10+ 会拦，消费者安装直接失败。
+  尤其 `prepare`：它在**从 git 来源安装**时必然触发，实测报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`。
+  本项目 `lib/` 已入库，安装侧不需要任何构建；构建交给 `prepublishOnly`
 - ❌ 在 README 里写没有验证过的能力（"支持全部 PDF""准确率 95%"）—— 见 `CHANGELOG` 的已知限制对照写
 - ❌ 把权重/阈值说成"标准" —— 它们现在是 **初案（未经校准）**，首个盲测后才回写实测值
 
@@ -147,15 +149,15 @@ Work Slop 是「任务要求 − 实际交付」的差，两个操作数。一�
 
 | 项 | 状态 |
 |---|---|
-| 代码 | 已实现（宿主 8 个模块 + 客户端 2 个模块 + 4 个脚本 + 4 个测试文件） |
+| 代码 | 已实现（宿主 9 个模块 + 客户端 2 个模块 + 4 个脚本 + 5 个测试文件） |
 | `npm run doctor` | ✅ 通过（Node 24.19.0，GBK 可用，零依赖） |
-| `npm run build` | ✅ 通过（`lib/` 9 个文件；装载层自证：顶层执行 / 注册 / 导出三件全 OK） |
-| `npm test` | ✅ **77 / 77 通过** |
-| `npm run verify` | ✅ 12 类发布契约断言全过 |
-| 装进 DSH 跑通 | ✅ **已装并在跑（0.3.6）** —— 设置 → AI垃圾过滤 面板可开；宿主注入 6 个工具；txt / md 输入多轮实测 |
+| `npm run build` | ✅ 通过（`lib/` 落盘 10 个文件；装载层自证：顶层执行 / 注册 / 导出三件全 OK） |
+| `npm test` | ✅ **120 / 120 通过** |
+| `npm run verify` | ✅ 发布契约校验全过 |
+| 装进 DSH 跑通 | ✅ **已装并在跑** —— 设置 → AI垃圾过滤 面板可开；宿主注入 6 个工具；txt / md 输入多轮实测 |
 | 真实文件回归 | **未做** —— 单测与实测都停在 txt 与自造 fixture，**没跑过一份 Word / PDF / Excel 真件** |
 | 盲测校准 | **未做**（权重与阈值全部为初案） |
-| 发布（npm） | **未发布** |
+| 发布（npm） | ✅ **已发布** —— `@yiyunet/dsh-kill-ai-slop`；桌面客户端与浏览器 GUI 两种装法见 README「安装」 |
 
 下一步的两个动作，按顺序：
 

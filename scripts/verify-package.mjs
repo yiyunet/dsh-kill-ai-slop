@@ -273,10 +273,18 @@ for (const entry of declaredEntries) {
     `package.json 声明的入口「${entry}」不在 files 白名单内 —— 发布后该入口会缺失`)
 }
 
-for (const hook of ['preinstall', 'install', 'postinstall']) {
+// 安装期/构建期钩子一律禁止。理由不是「不优雅」，是**会装不上**：
+// 从 git 或 tarball 来源安装时，宿主会要求执行这些脚本，而 pnpm 10+
+// 默认不执行依赖的构建脚本 —— 没有 allowBuilds 白名单就整包装不上。
+// 实测踩过：0.3.8 之前声明了 prepare，员工在桌面客户端安装直接报
+//   ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED（is not in the "allowBuilds" allowlist）
+// 构建由 prepublishOnly 覆盖；产物 lib/ 已入库，消费者侧本来就不需要构建。
+// 注：prepack 疑为同类（安装 git 依赖时也可能被要求执行），未实测，同样不要用。
+for (const hook of ['preinstall', 'install', 'postinstall', 'prepare']) {
   check(!(hook in (manifest.scripts ?? {})),
-    `package.json 不得声明 \`${hook}\` —— pnpm 10+ 对依赖的安装期脚本默认拦截，`
-    + '会让消费者侧安装直接失败（ERR_PNPM_IGNORED_BUILDS）。构建自动化用 prepare')
+    `package.json 不得声明 \`${hook}\` —— 从 git 来源安装时宿主要求执行该脚本，`
+    + '默认开启构建脚本审批的环境会直接拒绝（ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED），'
+    + '消费者侧装不上。构建交给 prepublishOnly；lib/ 已入库，安装不需要构建')
 }
 
 /* ── ⑩ 版本一致性 ───────────────────────────────────────────────────── */

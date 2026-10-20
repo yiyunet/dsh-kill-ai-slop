@@ -16,10 +16,10 @@
 >
 > | 项 | 状态 |
 > |---|---|
-> | 源码 | ✅ 已实现（宿主 8 模块 + 客户端 2 模块 + 4 脚本 + 4 测试文件） |
-> | `npm run build` | ✅ 通过 —— `lib/` 落盘 9 个文件；装载层自证：顶层执行 OK / 注册 OK / 导出 `{name,inject,apply}` OK |
-> | `npm test` | ✅ **77 / 77 通过**（规则、计分、提炼、解析、报告） |
-> | `npm run verify` | ✅ 12 类发布契约断言全过 |
+> | 源码 | ✅ 已实现（宿主 9 模块 + 客户端 2 模块 + 4 脚本 + 5 测试文件） |
+> | `npm run build` | ✅ 通过 —— `lib/` 落盘 10 个文件；装载层自证：顶层执行 OK / 注册 OK / 导出 `{name,inject,apply}` OK |
+> | `npm test` | ✅ **120 / 120 通过**（规则、计分、提炼、解析、台账） |
+> | `npm run verify` | ✅ 发布契约校验全过 |
 > | 装进 DSH 跑通 | ✅ **已装并在跑** —— 设置 → AI垃圾过滤 面板可开；宿主注入 6 个工具；txt / md 输入多轮实测 |
 > | npm 发布 | ✅ **已发布** —— `@yiyunet/dsh-kill-ai-slop` |
 >
@@ -82,11 +82,27 @@
 
 ## 安装
 
+装到哪里，取决于你**用哪个形态打开 DSH**。这两个地方互相独立 ——
+一边装了，另一边看不到。
+
+### ① 浏览器 GUI（`dsh web` / `dsh --profile web`）
+
 ```sh
-dsh plugin add @yiyunet/dsh-kill-ai-slop
+dsh plugin --profile web add @yiyunet/dsh-kill-ai-slop
 ```
 
-然后在 `cordis.patch.yml` 里（通常已由包的 patch 自动注入）确认：
+### ② 桌面客户端
+
+**不要用上面的命令。** 桌面版带着自己的一份运行时，插件落在保留的
+`$DSH_HOME/profiles/desktop` 里，由客户端自己管理 —— 在桌面版的插件窗口里填包名安装即可。
+
+填**包名** `@yiyunet/dsh-kill-ai-slop`，不要填 GitHub 地址：
+从 git 来源安装时宿主会要求执行包的构建脚本，在默认开启构建脚本审批的环境里会被直接拒绝
+（`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`）。
+
+### 确认装载
+
+无论哪一种，装完在 `cordis.patch.yml` 里（通常已由包的 patch 自动注入）确认：
 
 ```yaml
 - insert:
@@ -96,8 +112,8 @@ dsh plugin add @yiyunet/dsh-kill-ai-slop
 
 重启 Host → 打开 **设置** → 左侧出现 **AI垃圾过滤**。
 
-> 本版本的 `lib/` 需要构建生成。若你是从 git 直接安装，`prepare` 会自动跑 `scripts/build.mjs`；
-> 从 npm 安装则产物已在包内。
+> 本仓库把构建产物 `lib/` 一并提交，所以**从 npm 安装不需要任何构建步骤**。
+> 从 git 来源安装则要求能执行 `scripts/build.mjs`，多数受管环境默认不允许 —— 这也是推荐走 npm 的原因。
 
 ---
 
@@ -335,7 +351,7 @@ slop_obligation_audit(
 npm run doctor     # 前置条件体检（Node 版本 / GBK 支持 / 文件齐全 / 零依赖）
 npm run build      # plugin-src/ → lib/（零构建依赖，不用打包器）
 npm test           # node --test，单测直接测 plugin-src/
-npm run verify     # 十一条发布契约断言
+npm run verify     # 发布契约校验
 npm run check      # build + test + verify
 ```
 
