@@ -497,12 +497,33 @@ test('台账结论只在第一节出现一次，不得在"本次没判什么"里
   assert.equal(pointers.length, 1, '台账结论只能出现一次，重复印读者会以为有两件事')
 })
 
-test('B 维度的摘要不得再提"严重度"（状态列已写"不计分"）', () => {
+test('B 维度不计分：状态列写"线索 · 不计分"，严重度列必须是 —', () => {
   const report = audit({ buffer: Buffer.from(LEDGER_DOC, 'utf8'), filename: '方案.md', docType: 'proposal' })
   for (const dimension of report.dimensions.filter(item => item.index === 'B')) {
     assert.doesNotMatch(dimension.summary ?? '', /严重度/u, `${dimension.id} 的摘要仍在提严重度`)
+    // ★ 实测踩到过：B 的 state 就是 'scored'（算出来了，只是不参与分数），
+    //   客户端据此印出「3」并上了红色，而 markdown 那一栏印「—」——
+    //   同一份报告两个说法。判断现在只由 summarize 的 `counts` 提供，两边都读它。
+    assert.equal(dimension.counts, false, `${dimension.id} 不计分，counts 必须是 false`)
   }
   // 状态标签必须先报**状态**：B2 判不了就要写"未能评估"，不能压成"线索 · 不计分"——
   // 否则第三节说"这几项判不了"、第六节说"线索不计分"，同一个维度两套说法。
   assert.match(report.markdown, /\| B2 实质信息 \| 20% \| 未能评估 \|/u)
+
+  // 严重度列：凡「逐维观测」里 B 开头的行，第五格必须是 —，不得印等级。
+  // （cells[0] 是行首空串，1=维度 2=权重 3=状态 4=严重度）
+  // ⚠️ 必须把范围锁在逐维观测这张表：末尾「已退出计分的维度」也有以 | B3 开头的行，
+  //    但那张表没有严重度列，混进来会把一张正常的表判成错。
+  //    逐维观测的形状是 `| B1 目的陈述 | 15% | …` —— 第二格必须是「数字%」。
+  const bRows = report.markdown.split('\n')
+    .filter(line => /^\| B\d [^|]*\| \d+% \|/u.test(line))
+  assert.equal(bRows.length, 6, `逐维观测里应有 6 个 B 维度行，实际 ${bRows.length}`)
+  for (const row of bRows) {
+    const cells = row.split('|').map(cell => cell.trim())
+    assert.equal(cells[4], '—', `${cells[1]} 的严重度列必须是 —，实际「${cells[4]}」`)
+  }
+
+  // 反向守卫：不能靠"把严重度列一律抹成 —"过关。
+  assert.ok(report.dimensions.some(item => item.counts),
+    '至少要有一个真正计分的维度，否则"全是 —"也能通过上面那条')
 })

@@ -136,6 +136,15 @@ if (clientBundle === undefined) {
   check(!/^\s*(?:import|export)\s/mu.test(clientBundle),
     'lib/client.js 含 ESM 顶层 import/export —— 它是包装后的浏览器脚本，出现源码语法说明有人直接改过产物')
 
+  // ★「严重度印不印」只准读宿主算好的 counts。
+  //   实测踩到过：客户端自己写 `state === 'scored'` 判断，而 B 维度的 state 恰恰就是
+  //   'scored'（算出来了、只是不计分）—— 于是面板印「3」、markdown 印「—」，
+  //   同一份报告两个说法。客户端没有单测，只能在这里守一道。
+  if (clientSource !== undefined) {
+    check(containsMarker(clientSource, 'dimension.counts'),
+      'impl.mjs 未读宿主给的 dimension.counts —— 面板会自己判 state，与 markdown 漂成两个说法')
+  }
+
   // 交叉验证：源码里有、产物里没有 ⇒ 产物过期
   if (clientSource !== undefined) {
     for (const needle of ['AI垃圾过滤', 'Kill AI Slop', 'settings.section']) {
@@ -373,5 +382,5 @@ if (failures.length > 0) {
 }
 
 console.log('✓ 发布契约校验通过')
-console.log('  必需文件 · 依赖禁则 · 零运行时依赖 · 装载器 id · 面板契约（settings.section / order 23 / AI垃圾过滤）')
+console.log('  必需文件 · 依赖禁则 · 零运行时依赖 · 装载器 id · 面板契约（settings.section / order 23 / AI垃圾过滤 / counts 单一来源）')
 console.log('  产物无 ESM 语法 · RPC 端点三处一致 · 敏感信息 + 内部词汇 · 发布白名单自洽 · 版本一致 · 产物与源码同版 · 测试清单一致 · 零联网')

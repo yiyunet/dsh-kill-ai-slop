@@ -34,7 +34,7 @@ export const RULESET_VERSION = 'slop-rules/0.3.3'
  *   这种状态**不会报任何错**，只会安静地给出错分，是本插件最难被发现的一类故障。
  *   audit.mjs 用它做一致性闸门：对不上就拒绝出分并让人重启。
  */
-export const RULESET_ENGINE = '0.3.9'
+export const RULESET_ENGINE = '0.3.10'
 
 /** 两个指数（都 0–100，越高问题越重；都不是概率）。 */
 export const INDICES = {

@@ -18,6 +18,22 @@ import { DIMENSIONS, INDICES } from './rules.mjs'
 const round1 = value => Math.round(value * 10) / 10
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
+/**
+ * 这个维度的严重度**印不印、算不算** —— 判断只写这一处。
+ *
+ * ★ 实测踩到过：这条判断原先被写了两份。
+ *     markdown（audit.mjs）写 `isClue || state !== 'scored'`；
+ *     客户端面板（impl.mjs）写 `state === 'scored'`。
+ *   而 B 维度的 state 恰恰就是 `'scored'` —— 它**算出来了**，只是不参与分数。
+ *   于是同一份报告里：markdown 那一栏印「—」，客户端那一栏印「3」还上了红色。
+ *   这不是样式差异，是**同一件事两个说法**。
+ *
+ *   更麻烦的是 dimension 数组也被拼了两遍（这里一份、audit 里一份），
+ *   所以修的时候必须两处都认同一个函数，否则下次还会漂。
+ */
+export const countsTowardScore = dimension =>
+  dimension.index !== 'B' && dimension.state === 'scored'
+
 /** 严重度 → 人话。 */
 export const SEVERITY_LABEL = {
   0: '未发现问题',
@@ -73,6 +89,8 @@ function summarize(dimension) {
     state: dimension.state,
     severity: dimension.severity,
     severityLabel: dimension.state === 'scored' ? SEVERITY_LABEL[dimension.severity] : '—',
+    // ★「印不印严重度」不在本文件下判断，调 countsTowardScore —— 面板与报告读同一句话。
+    counts: countsTowardScore(dimension),
     reason: dimension.reason,
     summary: dimension.summary,
     note: dimension.note,

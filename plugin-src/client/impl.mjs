@@ -84,7 +84,7 @@ export function createClientPlugin(React) {
     barTrack: { height: 7, borderRadius: 4, background: 'rgba(127,127,127,0.22)', overflow: 'hidden', marginTop: 5 },
     barFill: { height: '100%', borderRadius: 4, transition: 'width .25s' },
     table: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 },
-    th: { textAlign: 'left', padding: '5px 6px', borderBottom: '1px solid rgba(127,127,127,0.3)', fontWeight: 600, fontSize: 11.5, opacity: 0.75 },
+    th: { textAlign: 'left', padding: '5px 6px', borderBottom: '1px solid rgba(127,127,127,0.3)', fontWeight: 600, fontSize: 11.5, opacity: 0.75, whiteSpace: 'nowrap', verticalAlign: 'middle' },
     td: { padding: '5px 6px', borderBottom: '1px solid rgba(127,127,127,0.14)', verticalAlign: 'top' },
     hit: {
       border: '1px solid rgba(127,127,127,0.2)', borderRadius: 8, padding: '8px 10px', marginTop: 8,
@@ -495,14 +495,20 @@ export function createClientPlugin(React) {
     }
 
     function renderDimensions() {
+      // 列宽写死 + nowrap。中文表头在窄列里会**逐字竖排**（「权/重」「严/重/度」），
+      // 表头行于是被撑成三行高，跟「维度」「状态」对不齐 —— 看上去像几个格子各自长了腿。
+      // 宽度给够，内容一行的列就永远一行。
+      const colFirst = { width: 124, whiteSpace: 'nowrap' }
+      const colNarrow = { width: 56, whiteSpace: 'nowrap' }
+      const colState = { width: 104, whiteSpace: 'nowrap' }
       return h('div', { style: S.card },
         h('div', { style: S.secTitle }, '逐维判定'),
         h('table', { style: S.table },
           h('thead', null, h('tr', null,
-            h('th', { style: S.th }, '维度'),
-            h('th', { style: S.th }, '权重'),
-            h('th', { style: S.th }, '状态'),
-            h('th', { style: S.th }, '严重度'),
+            h('th', { style: Object.assign({}, S.th, colFirst) }, '维度'),
+            h('th', { style: Object.assign({}, S.th, colNarrow) }, '权重'),
+            h('th', { style: Object.assign({}, S.th, colState) }, '状态'),
+            h('th', { style: Object.assign({}, S.th, colNarrow) }, '严重度'),
             h('th', { style: S.th }, '说明'),
           )),
           h('tbody', null, report.dimensions.map(dimension => {
@@ -519,11 +525,17 @@ export function createClientPlugin(React) {
                   setOpenDim(prev => Object.assign({}, prev, { [dimension.id]: !open }))
                 },
               },
-                h('td', { style: S.td }, `${dimension.id} ${dimension.label}`),
-                h('td', { style: Object.assign({}, S.td, { fontVariantNumeric: 'tabular-nums' }) }, `${dimension.weight}%`),
-                h('td', { style: S.td }, stateLabel),
-                h('td', { style: Object.assign({}, S.td, { color: dimension.state === 'scored' ? severityColor(dimension.severity) : 'inherit' }) },
-                  dimension.state === 'scored' ? `${dimension.severity}` : '—'),
+                h('td', { style: Object.assign({}, S.td, colFirst) }, `${dimension.id} ${dimension.label}`),
+                h('td', { style: Object.assign({}, S.td, colNarrow, { fontVariantNumeric: 'tabular-nums' }) }, `${dimension.weight}%`),
+                h('td', { style: Object.assign({}, S.td, colState) }, stateLabel),
+                // 印不印严重度只读 `counts`（宿主算一次），不在客户端重下一遍判断 ——
+                // 否则就会重演"markdown 印 —、客户端印 3"那件事。
+                h('td', {
+                  style: Object.assign({}, S.td, colNarrow, {
+                    color: dimension.counts ? severityColor(dimension.severity) : 'inherit',
+                    fontVariantNumeric: 'tabular-nums',
+                  }),
+                }, dimension.counts ? `${dimension.severity}` : '—'),
                 h('td', { style: Object.assign({}, S.td, { fontSize: 11.5, opacity: 0.8 }) },
                   dimension.state === 'scored'
                     ? (dimension.summary ?? '')
