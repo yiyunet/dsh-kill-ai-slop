@@ -24,7 +24,7 @@ import {
 } from './text.mjs'
 
 /** 规则集版本 —— 规则/权重/阈值任一改动必须换版本，新旧分数不直接可比。 */
-export const RULESET_VERSION = 'slop-rules/0.3.2'
+export const RULESET_VERSION = 'slop-rules/0.3.3'
 
 /**
  * 这套规则是为哪个引擎版本构建的。
@@ -34,7 +34,7 @@ export const RULESET_VERSION = 'slop-rules/0.3.2'
  *   这种状态**不会报任何错**，只会安静地给出错分，是本插件最难被发现的一类故障。
  *   audit.mjs 用它做一致性闸门：对不上就拒绝出分并让人重启。
  */
-export const RULESET_ENGINE = '0.3.8'
+export const RULESET_ENGINE = '0.3.9'
 
 /** 两个指数（都 0–100，越高问题越重；都不是概率）。 */
 export const INDICES = {
@@ -61,7 +61,7 @@ export const DIMENSIONS = [
   { id: 'A2', index: 'A', label: '信息重复', weight: 25 },
   { id: 'A3', index: 'A', label: '模板化表达', weight: 20 },
   { id: 'A4', index: 'A', label: '模糊与夸大', weight: 20 },
-  { id: 'A5', index: 'A', label: '无效结构', weight: 10 },
+  { id: 'A5', index: 'A', label: '段落推进', weight: 10 },
   { id: 'B1', index: 'B', label: '目的陈述', weight: 15 },
   { id: 'B2', index: 'B', label: '实质信息', weight: 20 },
   { id: 'B3', index: 'B', label: '论据支撑', weight: 20 },
@@ -88,6 +88,7 @@ const NOT_APPLICABLE = {
   minutes: {
     B3: '会议纪要靠如实记录取得价值，不承担论证义务 —— 判它"缺论据"是拿错尺子量。',
     B5: '纪要不要求给出取舍与风险分析。',
+    A5: '纪要按议题并列记录，段与段之间本来就不承担推进义务 —— 用"段间无推进"量它是拿错尺子（与 B3 同理）。',
   },
   explainer: {
     B3: '说明类文档可以只陈述结论，论证义务在更上游的文件里。',
@@ -97,6 +98,7 @@ const NOT_APPLICABLE = {
   notice: {
     B3: '通知不承担论证义务。',
     B5: '通知不要求给出取舍与风险分析。',
+    A5: '通知是并列事项清单，不承担论证推进 —— 段间无推进不算缺陷。',
   },
   research: {
     B6: '研究报告交付的是结论，不承诺执行动作。',
@@ -526,135 +528,189 @@ function evaluateA4(ctx) {
   return { severity, hits: hits.slice(0, 24), note: notes.join(' '), summary: notes.join(' ') }
 }
 
+/* ──────────── A5 的判定对象：段落与段落之间有没有推进关系 ───────────────
+ *
+ * ★ 2026-10-19 裁决：标题层级跳跃 / 空标题 / 单条列表 / 强调过载**一律不计分**。
+ *   这四条判的都是**排版格式**，不是"段落之间的语义结构" —— 而 A5 只对后者负责。
+ *
+ *   实测症状（老板贴的截图）：一份正常报告因为 H3→H5 跳级，被报了 4 条**一模一样的**
+ *   「为什么 / 怎么改」，报告上写着「发现 5 处结构问题」。那条规则判的是 `#` 的个数，
+ *   与"这一段有没有推进上一段"毫无关系；读者却会以为这份文档内容结构有毛病。
+ *
+ *   顺带修掉第二个缺陷：同一规则的重复命中没有合并。`severity = tier(hits.length, …)`
+ *   意味着"一条规则发现 4 处同类格式问题"就把维度严重度顶到 2 级。A2 早在 0.2.x
+ *   踩过同一个坑（见 evaluateA2 上方注释：报了四条、条条相同 → 直接削弱对报告的信任），
+ *   A5 没做同样处理。本次统一：**severity 按全量对数算，证据最多列 3 条**。
+ *
+ *   格式层面仍在 summary/note 里如实披露"查了什么、查到几条" ——
+ *   「不计入评分」不等于「不告诉你」。
+ */
+
+/** 段首推进标记 —— 出现即认为与上一段有承接。宁宽勿严：漏报好过误报。 */
+const PROGRESSION_MARKERS = [
+  // 因果 / 推论
+  '因此', '所以', '因而', '于是', '从而', '据此', '由此可见', '这意味着', '这就意味着',
+  '结果是', '导致', '基于此', '由此',
+  // 转折 / 对比
+  '但是', '然而', '不过', '相反', '反之', '另一方面', '相比之下', '与此相对',
+  // 递进 / 并列推进
+  '另外', '此外', '同时', '其次', '再次', '再者', '进一步', '更重要的是',
+  '首先', '第一', '第二', '第三', '最后', '综上', '总而言之', '总的来说', '小结',
+  // 条件 / 限定
+  '如果', '若', '除非', '前提是', '在这种情况下', '在这个前提下',
+  // 回指 —— 段首回指几乎必然是承接
+  '上述', '前者', '后者', '该', '此', '其', '这', '它',
+  // 时间 / 顺序
+  '之后', '随后', '此前', '目前', '下一步', '接下来',
+]
+
+const PROGRESSION_EN = [
+  'therefore', 'thus', 'hence', 'consequently', 'however', 'but', 'moreover',
+  'furthermore', 'additionally', 'in addition', 'meanwhile', 'as a result',
+  'in contrast', 'conversely', 'similarly', 'first', 'second', 'third', 'finally',
+  'overall', 'in short', 'this', 'these', 'those', 'such', 'it', 'they', 'that',
+]
+
+const CJK_RUNS = /[\u4e00-\u9fff]+/gu
+const LATIN_WORDS = /[A-Za-z]{4,}/gu
+const HEADING_LINE = /^#{1,6}\s+\S/u
+const LIST_LINE = /^(?:[-*+•]|\d{1,2}[.)])\s+\S/u
+const EDGE_MARKS = /^[\s>#*+\-\d.)|]+/u
+
+/** 去掉段首的 markdown 修饰符，取前 16 字判承接。 */
+const headOf = text => text.replace(EDGE_MARKS, '').slice(0, 16)
+
+function startsWithProgression(text) {
+  const head = headOf(text)
+  if (head === '') return true
+  for (const marker of PROGRESSION_MARKERS) if (head.startsWith(marker)) return true
+  const flat = text.replace(EDGE_MARKS, '').toLowerCase()
+  for (const marker of PROGRESSION_EN) {
+    if (flat.startsWith(`${marker} `) || flat.startsWith(`${marker},`) || flat === marker) return true
+  }
+  return false
+}
+
+/** 中文取 4 字窗口、英文取 ≥4 字母词 —— 只用于判"两段有没有共同的实词片段"。 */
+function contentWindows(text) {
+  const windows = new Set()
+  for (const run of text.match(CJK_RUNS) ?? []) {
+    for (let at = 0; at + 4 <= run.length; at += 1) windows.add(run.slice(at, at + 4))
+  }
+  for (const word of text.match(LATIN_WORDS) ?? []) windows.add(word.toLowerCase())
+  return windows
+}
+
+function sharesContent(previous, current) {
+  const before = contentWindows(previous)
+  if (before.size === 0) return false
+  for (const window of contentWindows(current)) if (before.has(window)) return true
+  return false
+}
+
+/** 段落块 → 去掉段首标题行之后的正文；偏移仍然对得回原文。 */
+function contentBlock(paragraph) {
+  const lines = paragraph.text.split('\n')
+  let at = 0
+  let skip = 0
+  while (at < lines.length && HEADING_LINE.test(lines[at].trim())) {
+    skip += lines[at].length + 1
+    at += 1
+  }
+  return {
+    text: lines.slice(at).join('\n'),
+    start: Math.min(paragraph.start + skip, paragraph.end),
+  }
+}
+
+/**
+ * 纯列表块、纯表格块不参与"段间推进"判定。
+ *
+ * ★ 这里保留两段血泪备注（原 A5-空标题 / A5-单条列表 的实测回归）：
+ *   ① 父标题紧跟子标题**不是**空标题 —— 中文报告默认就是「## 一、/ ### 1.1」两级排版，
+ *      当年"下一个非空行只要是标题就判空"把每一个父标题都误报了一遍。
+ *   ② 项与项之间空一行的"松散列表"是合法写法 —— 当年按空行切块，于是每一个列表项
+ *      都被误报成"单条列表"。
+ *   这两条规则现在不计分了，但结论不能丢：**格式类判断极易误报，本就不该进分数。**
+ */
+function isListOrTable(text) {
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line !== '')
+  if (lines.length === 0) return true
+  return lines.every(line => LIST_LINE.test(line) || line.startsWith('|'))
+}
+
+const tailOf = text => text.replace(/\s+/gu, ' ').trim().slice(-24)
+const headText = text => text.replace(/\s+/gu, ' ').trim().slice(0, 70)
+
 function evaluateA5(ctx) {
-  const source = ctx.text
-  const hasStructure = ctx.stats.headings > 0 || ctx.stats.listItems > 0
-  if (!hasStructure) {
+  const boldRatio = ctx.stats.charsNoSpace === 0
+    ? 0
+    : Math.round((ctx.stats.boldChars / ctx.stats.charsNoSpace) * 100)
+  const formatDisclosure = `格式层面另检：标题 ${ctx.stats.headings} 个、列表项 ${ctx.stats.listItems} 个、`
+    + `加粗占比 ${boldRatio}% —— 标题层级跳跃 / 空标题 / 单条列表 / 强调过载属排版格式，`
+    + '不是段落之间的语义结构，一律不计分。'
+
+  const blocks = ctx.paragraphs
+    .map(contentBlock)
+    .filter(block => block.text.replace(/\s/gu, '').length >= 30)
+    .filter(block => !isListOrTable(block.text))
+
+  if (blocks.length < 3) {
     return {
       state: 'not-applicable',
-      reason: '全文没有任何标题或列表标记 —— 没有结构元素可评，不当缺陷计。',
+      reason: `可参与判定的正文段落只有 ${blocks.length} 段（需 ≥3 段）—— `
+        + '段与段的关系无从谈起，本维不适用，不当缺陷计。',
       severity: 0,
       hits: [],
-      summary: '无结构元素，本维不适用。',
+      note: formatDisclosure,
+      summary: '正文段落不足 3 段，段间关系不适用。',
     }
   }
 
-  const hits = []
-  const lines = source.split('\n')
-
-  // 标题层级跳跃
-  let previousLevel = 0
-  let offset = 0
-  for (const line of lines) {
-    const match = /^(#{1,6})\s+/u.exec(line)
-    if (match !== null) {
-      const level = match[1].length
-      if (previousLevel > 0 && level > previousLevel + 1) {
-        hits.push(hitOf(ctx, {
-          rule: 'A5-层级跳跃',
-          dimension: 'A5',
-          severity: 1,
-          start: offset,
-          end: offset + line.length,
-          why: `标题从 H${previousLevel} 直接跳到 H${level} —— 层级断了，读者无法靠目录定位。`,
-          fix: '补中间层级，或把该标题降/升一级对齐上下文。',
-        }))
-      }
-      previousLevel = level
-    }
-    offset += line.length + 1
+  let pairs = 0
+  const stalled = []
+  for (let at = 1; at < blocks.length; at += 1) {
+    const previous = blocks[at - 1]
+    const current = blocks[at]
+    pairs += 1
+    if (startsWithProgression(current.text)) continue
+    if (sharesContent(previous.text, current.text)) continue
+    stalled.push({ previous, current })
   }
 
-  // 空标题（标题下面确实什么都没有）
-  //
-  // ⚠️ 这里曾写成"下一个非空行只要是任意级标题就判空"。于是最常见的两级排版：
-  //      ## 一、渠道分析
-  //      ### 1.1 PartsTech 准入
-  //    每一个父标题都被误报一次 —— 而中文报告默认就这么写，这不是边缘情况。
-  //    父标题有下级内容 ≠ 空。只有"下一个非空行是**同级或更浅**的标题"
-  //    （或者直到文件结束都没有内容），才说明这个标题下面真的空着。
-  for (let at = 0; at < lines.length; at += 1) {
-    if (!/^#{1,6}\s+\S/u.test(lines[at])) continue
-    const level = /^(#{1,6})\s+\S/u.exec(lines[at])[1].length
-    const next = lines.slice(at + 1).find(line => line.trim() !== '')
-    const nextLevel = next === undefined ? 0 : (/^(#{1,6})\s+\S/u.exec(next)?.[1].length ?? 0)
-    // 下一行是更深的标题 ⇒ 它有下级内容，不算空标题
-    if (nextLevel !== 0 && nextLevel > level) continue
-    if (next === undefined || /^#{1,6}\s+\S/u.test(next)) {
-      const start = lines.slice(0, at).reduce((sum, line) => sum + line.length + 1, 0)
-      hits.push(hitOf(ctx, {
-        rule: 'A5-空标题',
-        dimension: 'A5',
-        severity: 1,
-        start,
-        end: start + lines[at].length,
-        why: '这个标题下面没有内容 —— 它只是让文档看起来有结构。',
-        fix: '补上内容，或删掉这个标题。',
-      }))
-    }
-  }
+  const ratio = pairs === 0 ? 0 : stalled.length / pairs
+  const judged = pairs >= 3 && stalled.length >= 3 && ratio >= 0.5
+  const severity = judged ? tier(stalled.length, [[3, 1], [6, 2], [10, 3]]) : 0
+  const percent = Math.round(ratio * 100)
 
-  // 单条列表
-  //
-  // ⚠️ 这里曾按空行切块（`source.split(/\n\s*\n/u)`），再数每块里有几个列表项。
-  //    但 Markdown 的"松散列表"（项与项之间空一行）是合法且常见的写法，
-  //    它会被切成 N 个只含 1 项的小块 —— 于是**每一个列表项**都被误报成"单条列表"。
-  //    正确做法：顺序扫描，空行**不结束**列表块；只有遇到非列表、非空的行才结束。
-  let blockItems = 0
-  let blockStart = -1
-  let blockFirstLength = 0
-  const flushListBlock = () => {
-    if (blockItems === 1) {
-      hits.push(hitOf(ctx, {
-        rule: 'A5-单条列表',
-        dimension: 'A5',
-        severity: 1,
-        start: blockStart,
-        end: blockStart + blockFirstLength,
-        why: '只有一项的列表不是列表 —— 它借用了列表的视觉重量，却没有并列关系。',
-        fix: '直接写成一句话，或补上其余并列项。',
-      }))
-    }
-    blockItems = 0
-    blockStart = -1
-    blockFirstLength = 0
-  }
-  let cursor = 0
-  for (const line of lines) {
-    if (/^\s*(?:[-*+•]|\d{1,2}[.)])\s+\S/u.test(line)) {
-      if (blockStart < 0) {
-        blockStart = cursor
-        blockFirstLength = line.length
-      }
-      blockItems += 1
-    } else if (line.trim() !== '') {
-      flushListBlock()
-    }
-    cursor += line.length + 1
-  }
-  flushListBlock()
+  // 证据最多列 3 条：severity 按全量对数算，不按列出的条数算。
+  const hits = (judged ? stalled.slice(0, 3) : []).map(pair => hitOf(ctx, {
+    rule: 'A5-段间无推进',
+    dimension: 'A5',
+    severity: 1,
+    start: pair.current.start,
+    end: pair.current.start + Math.min(70, pair.current.text.length),
+    why: `上一段以「${tailOf(pair.previous.text)}」收尾，这一段以「${headText(pair.current.text)}」开头`
+      + ' —— 两段之间既没有承接词，也没有共同的实词片段。把两段对调，读起来一样通顺：'
+      + '它们是并排摆放的，不是推进关系。',
+    fix: '补一句过渡（承接 / 因果 / 转折），或把这一段并进上一段；'
+      + '如果本来就是并列要点，用列表表达并列，别用分段暗示推进。',
+  }))
 
-  // 加粗占比
-  if (ctx.stats.charsNoSpace > 0 && ctx.stats.boldChars / ctx.stats.charsNoSpace > 0.15) {
-    hits.push(hitOf(ctx, {
-      rule: 'A5-强调过载',
-      dimension: 'A5',
-      severity: 2,
-      start: 0,
-      end: Math.min(80, source.length),
-      why: `加粗内容占正文 ${((ctx.stats.boldChars / ctx.stats.charsNoSpace) * 100).toFixed(0)}% —— 全部强调等于没有强调。`,
-      fix: '只保留真正的结论句加粗，控制在 5% 以内。',
-    }))
-  }
+  const note = [
+    formatDisclosure,
+    judged && stalled.length > 3 ? `另有 ${stalled.length - 3} 对无推进的相邻段未逐条列出。` : undefined,
+  ].filter(Boolean).join(' ')
 
-  const severity = tier(hits.length, [[1, 1], [3, 2], [6, 3]])
-  return {
-    severity,
-    hits: hits.slice(0, 20),
-    summary: hits.length === 0
-      ? `检查了 ${ctx.stats.headings} 个标题、${ctx.stats.listItems} 个列表项，未发现无效结构。`
-      : `发现 ${hits.length} 处结构问题。`,
-  }
+  const summary = judged
+    ? `相邻段落 ${pairs} 对，其中 ${stalled.length} 对既无承接词也无共同实词（占 ${percent}%）`
+      + ' —— 段落可任意换序，是并排堆放而非推进。'
+    : (stalled.length === 0
+      ? `相邻段落 ${pairs} 对，每对都有承接词或共同实词 —— 段落之间存在推进关系。`
+      : `相邻段落 ${pairs} 对，其中 ${stalled.length} 对无承接词也无共同实词（占 ${percent}%），`
+        + '未达判"并排堆放"的门槛（需 ≥3 对且占比 ≥50%），仅作提示、不计分。')
+
+  return { severity, hits, note, summary }
 }
 
 /* ──────────────────────── B 组：工作空转 ───────────────────────────── */

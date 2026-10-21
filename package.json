@@ -1,6 +1,6 @@
 {
   "name": "@yiyunet/dsh-kill-ai-slop",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "DSH 插件：AI垃圾过滤（Kill AI Slop）——给收到的文件打一个可回溯的体检得分（表达／执行／决策三维加权），用交付承接台账审查工作空转，每条引文回原文机器复核。零依赖、零联网、纯本地计算。Score a document for AI-slop and work-slop with a quote-verified obligation ledger.",
   "keywords": [
     "deepseek-harness",

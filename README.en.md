@@ -68,7 +68,7 @@ The two words in the name are the two starting points of the scoring
 
 | Term | What it means | Index here |
 |---|---|---|
-| **AI Slop** | Text that looks like content but carries none: filler, repetition, templated phrasing, vagueness, structural noise | Expression (A) — 20% |
+| **AI Slop** | Text that looks like content but carries none: filler, repetition, templated phrasing, vagueness, paragraphs that do not advance | Expression (A) — 20% |
 | **Work Slop** | Pushing the thinking and the tidying that should have been done onto the reader: no purpose, no evidence, no owner, no deadline | Execution (C) + Decision (D) — 80% |
 
 What they share: **neither asks "who wrote it" — both ask "how much effort does this file push onto you."**
@@ -91,7 +91,7 @@ So this plugin reports **one** auditable score, 0–100 (higher = worse) — nev
 
 | Index | Question | Dimensions |
 |---|---|---|
-| **Expression (A)** — weight 20 | How much reading cost produced no information | filler, repetition, templates, vagueness, useless structure |
+| **Expression (A)** — weight 20 | How much reading cost produced no information | filler, repetition, templates, vagueness, paragraphs that do not advance |
 | **Execution (C)** — weight 40 | Does the deliverable say who does what, by when, in what shape | owners, deadlines, next-step form |
 | **Decision (D)** — weight 40 | Does the deliverable say what was chosen, what was dropped, and on what evidence | options, trade-offs, basis |
 
