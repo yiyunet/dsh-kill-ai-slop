@@ -17,6 +17,7 @@ import {
   ACTION_MARK,
   CLAIM,
   EVIDENCE,
+  NEGATED_DUTY,
   OWNER_MARK,
   PURPOSE_MARK,
   PURPOSE_SPECIFIC,
@@ -25,6 +26,7 @@ import {
   VACUOUS_CJK,
   VACUOUS_EN,
   TIME_MARK,
+  partyOf,
 } from './rules.mjs'
 import { hardProtection, locate, protectionProfile, splitParagraphs, splitSentences } from './text.mjs'
 
@@ -241,23 +243,49 @@ function distillStance(sentences) {
   }
 }
 
-/** 执行（动作、责任人、交付物、期限、验收、依赖）。 */
+/**
+ * 执行（动作、责任人、交付物、期限、验收、依赖）。
+ *
+ * ★ 0.3.11：先判**归属**，再判缺项。
+ *   老板反馈的原话：「责任人与期限均未说明这种没有区分哪些是汇报人要做的，
+ *   哪些是汇报人阐述的内容」。
+ *   一份《经销商协议》里几乎每一句都是对方义务 —— 责任人由条款主语给出，
+ *   却被逐条判成"没写责任人"。这罚的不是作者的疏漏，是工具自己没看主语。
+ *
+ *   所以每条动作项带一个 `party`：
+ *     other 对方/第三方义务 → 责任人 = 该方；缺期限只记事实，不计缺口
+ *     self  对读者/我方的要求 → 缺责任人、缺期限都算缺口
+ *     none  无主语           → 按"未说明"处理（这是真歧义，该追问）
+ *   `gap` 是**唯一**的计分闸门：下游不再按 owner/due 自己重判一遍
+ *   （"同一件事两处各判一遍"是本插件反复踩的那个坑）。
+ */
 function distillActions(sentences, limit) {
   const actions = []
   for (const sentence of sentences) {
     if (!ACTION_MARK.test(sentence.text) || sentence.boilerplate || isStructural(sentence.text)) continue
+    // 「仅负责上架销售、无案例提交义务」是一条职责边界，不是待办
+    if (NEGATED_DUTY.test(sentence.text)) continue
+    const { party, name } = partyOf(sentence.text)
     const ownerMatch = OWNER_MARK.exec(sentence.text)
     const timeMatch = TIME_MARK.exec(sentence.text)
+    const other = party === 'other'
+    const owner = other ? name : (ownerMatch === null ? '未说明' : ownerMatch[0].trim())
+    const due = timeMatch === null ? '未说明' : timeMatch[0].trim()
+    const hasOwner = owner !== '未说明'
+    const hasDue = due !== '未说明'
     actions.push({
       action: sentence.text,
       start: sentence.start,
       end: sentence.end,
       line: sentence.line,
-      owner: ownerMatch === null ? '未说明' : ownerMatch[0].trim(),
-      due: timeMatch === null ? '未说明' : timeMatch[0].trim(),
-      status: ownerMatch !== null && timeMatch !== null
-        ? '已写明'
-        : (ownerMatch === null && timeMatch === null ? '责任人与期限均未说明' : (ownerMatch === null ? '缺责任人' : '缺期限')),
+      party,
+      owner,
+      due,
+      // 计分闸门只有这一处。
+      gap: !other && !(hasOwner && hasDue),
+      status: other
+        ? `对方义务 · ${name}${hasDue ? ` · ${due}` : ' · 未注明期限'}`
+        : (hasOwner && hasDue ? '已写明' : (hasOwner ? '缺期限' : (hasDue ? '缺责任人' : '责任人与期限均未说明'))),
     })
     if (actions.length >= limit) break
   }
@@ -369,9 +397,11 @@ export function distill(text, options = {}) {
   if (purpose.status === '未明示') questions.push('这份文件要你做什么决定或动作？请对方用一句话写清。')
   if (purpose.status === '推断') questions.push('目的句没写要读者做什么 —— 需要审批、确认，还是只要知会？')
   if (actions.length === 0) questions.push('这份文件里有需要执行的动作吗？若有，谁做、什么时候交？')
-  const missingOwner = actions.filter(action => action.owner === '未说明')
+  // ★ 只对**需要判缺项**的动作追问。对方义务（条款主语已给出责任人）既不算缺责任人也算缺期限，
+  //   否则追问栏会对着一段合同条款问「谁负责」—— 读者回一句"经销商啊"，一次信任就没了。
+  const missingOwner = actions.filter(action => action.gap && action.owner === '未说明')
   if (missingOwner.length > 0) questions.push(`${missingOwner.length} 条动作没有责任人 —— 谁负责？`)
-  const missingDue = actions.filter(action => action.due === '未说明')
+  const missingDue = actions.filter(action => action.gap && action.due === '未说明')
   if (missingDue.length > 0) questions.push(`${missingDue.length} 条动作没有期限 —— 什么时候要？`)
   const unsupported = claims.filter(claim => claim.support !== '同句有依据标记')
   if (unsupported.length > 0) questions.push(`${unsupported.length} 条主张同句内无依据 —— 依据是什么？请给出可核来源。`)

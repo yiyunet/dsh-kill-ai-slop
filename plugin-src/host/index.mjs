@@ -21,8 +21,11 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 
 import { ENGINE_VERSION, audit, renderAuditMarkdown } from './audit.mjs'
 import { distill, renderDistillMarkdown } from './distill.mjs'
+import { CELLS, CONDITIONS, CONDITION_ORDER, DISPLAY_ORDER, LAYERS, SCORE_ANCHORS } from './layers.mjs'
 import { auditObligations, renderObligationMarkdown, verifyQuote } from './obligations.mjs'
 import { parseFile } from './parse.mjs'
+import { docIdOf } from './review.mjs'
+import { PROTOCOL, REVIEW_SCHEMA, rubricFull } from './rubric.mjs'
 import { DOC_TYPES, RULESET_ENGINE, RULESET_VERSION } from './rules.mjs'
 import { registerSlopRpc } from './rpc.mjs'
 
@@ -60,6 +63,62 @@ function parseObligationsArg(raw) {
     })
   }
   return list
+}
+
+/**
+ * 把四层十二格的三个可选参数（cells / gaps / pending）统一成数组。
+ *
+ * 与 `parseObligationsArg` 同一套原则：只保证"形状对"，不保证"判得对"。
+ * 判得对不对是语义问题 —— 插件的职责是**不替你判，但要能算出你说的那套**。
+ * 空串 / 缺省都返回 undefined（= 不传），交给 audit 走"十二格未评"的分支。
+ */
+function parseJsonArrayArg(raw, field) {
+  if (raw === undefined || raw === null) return undefined
+  if (Array.isArray(raw)) return raw
+  const text = String(raw).trim()
+  if (text === '') return undefined
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw Object.assign(new Error(`${field} 不是合法 JSON：${error.message}`), {
+      code: 'BAD_JSON',
+      hint: field === 'cells'
+        ? '传 JSON 数组，例如 [{"id":"I2","state":"rated","score":3,"attribution":"submitter","deduction":{"C1":"…","C2":"…","C3":"…","C4":"…"}}]。'
+        : `传 JSON 数组，例如 [{"cell":"E2","affects":"local","work":"审批期间的对外报价口径"}]。`,
+    })
+  }
+  const list = Array.isArray(parsed) ? parsed : parsed?.[field]
+  if (list !== undefined && !Array.isArray(list)) {
+    throw Object.assign(new Error(`${field} 必须是数组，或用 {"${field}": [...]} 包装。`), { code: 'BAD_INPUT' })
+  }
+  return list
+}
+
+/**
+ * 把 `review` 参数（JSON 字符串或对象）统一成对象。
+ *
+ * 与 `parseJsonArrayArg` 同一套原则：只保证"形状对"，不保证"判得对"。
+ * 判得对不对由 verifyReview 负责 —— 它核引文、核状态、核算术，但不核立场。
+ */
+function parseJsonObjectArg(raw, field) {
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw
+  const text = String(raw).trim()
+  if (text === '') return undefined
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw Object.assign(new Error(`${field} 必须是对象`), { code: 'BAD_INPUT' })
+    }
+    return parsed
+  } catch (error) {
+    if (error?.code === 'BAD_INPUT') throw error
+    throw Object.assign(new Error(`${field} 不是合法 JSON：${error.message}`), {
+      code: 'BAD_JSON',
+      hint: `传对象或 JSON 对象字符串，字段见 slop_prepare 返回的 reviewSchema。`,
+    })
+  }
 }
 
 function fail(error) {
@@ -157,6 +216,36 @@ export function apply(ctx, config = {}) {
         supported: ['txt', 'md', 'csv', 'json', 'log', 'yaml', 'html', 'rtf', 'docx', 'pptx', 'xlsx', 'pdf'],
         notSupported: ['doc', 'xls', 'ppt', 'ZIP/RAR 压缩包', '图片（无 OCR）', 'eml/msg'],
         docTypes: DOC_TYPES,
+        // 四层十二格的定义 —— Agent 据此填 cells，不必再翻文档。
+        layers: {
+          direction: 'higher-is-better（0.5.x；与 0.3.x 相反，跨版本不可比）',
+          // 显示顺序：表达 → 策略 → 执行 → 意图（与报告 §〇、面板一致，唯一来源在 layers.mjs）
+          displayOrder: DISPLAY_ORDER,
+          weights: Object.fromEntries(DISPLAY_ORDER.map(id => [id, LAYERS[id].weight])),
+          weightsCalibrated: false,
+          formula: '层分 = 已评格平均分 ÷ 4 × 100；综合 = 意图×0.20 + 策略×0.35 + 执行×0.35 + 表达×0.10',
+          scoringIsManual: '0–4 由**通读全文的那一方**判定，引擎只登记原文、核对引文与状态、算分出报。'
+            + '没有 review 就不出分 —— 让引擎自己给分就是 0.6.0 的老毛病（字段齐全 = 高分，一个词就换一套尺）。',
+          reviewProtocol: PROTOCOL.map(item => `${item.id} ${item.rule}：${item.text}`),
+          rubric: rubricFull(),
+          anchors: SCORE_ANCHORS,
+          layers: DISPLAY_ORDER.map(id => ({
+            id,
+            label: LAYERS[id].label,
+            question: LAYERS[id].question,
+            slopPattern: LAYERS[id].slopPattern,
+            cells: LAYERS[id].cells.map(cellId => ({
+              id: cellId,
+              label: CELLS[cellId].label,
+              question: CELLS[cellId].question,
+            })),
+          })),
+          deductionGate: {
+            requires: Object.fromEntries(CONDITION_ORDER.map(id => [id, CONDITIONS[id].label])),
+            attribution: '归属为 other-party / undetermined 时不得扣分；未过闸的扣分只降级为建议。',
+          },
+          readinessRule: '按缺口影响哪些工作定（direction→重新形成方案／local→补充／待确认→先做不受影响的／都没有→可以推进），不按最低分换算。',
+        },
         gates: {
           inputRoots: Array.isArray(config.inputRoots) ? config.inputRoots : [],
           maxFileBytes: Number(config.maxFileBytes ?? 20 * 1024 * 1024),
@@ -167,7 +256,8 @@ export function apply(ctx, config = {}) {
         weightsAreProvisional: '维度权重与阈值当前为初案（未经校准），不是已验证标准；规则集变更即换版本号。',
         tools: [
           'slop_engine_info（本工具）',
-          'slop_audit_text（文本体检：A 表达指数 + 交付承接台账 + 结构检查）',
+          'slop_prepare（评审准备：docId + 结构图 + 12 格判定规程，**不出分**）',
+          'slop_audit_text（文本体检：带 review 才出分）',
           'slop_audit_file（文件体检，需 inputRoots）',
           'slop_distill（五要素保真提炼）',
           'slop_obligation_audit（交付承接台账：义务逐条记账 + 引文复核）',
@@ -211,12 +301,13 @@ export function apply(ctx, config = {}) {
   // ── ② 体检（文本）──────────────────────────────────────────────────────
   ctx.tools.register(defineTool({
     name: 'slop_audit_text',
-    description: '对一段文本做「AI垃圾过滤」体检：给出表达指数（A 表达水分）、'
-      + '逐维证据（原文片段 + 为什么 + 怎么改）、覆盖判定与可信度，并附五要素提炼。'
-      + '**工作空转（B）不出指数** —— 它要回答"任务有没有被接住"，必须由你传入任务原话（task）'
-      + '和你拆出的义务表（obligations），报告会把承接结论放在第一节并附逐条台账。'
-      + '判的是"这份文件能不能用"，不鉴定作者。'
-      + '⚠️ 零命中不等于干净；解析覆盖不足时不会给总分（会明示）。',
+    description: '对一段文本做「AI垃圾过滤」体检：给出**四层十二格**（意图／策略／执行／表达，'
+      + '权重 20/35/35/10，**分数越高越好**）＋逐格证据＋推进结论＋五要素提炼。'
+      + '判断单位是「尚未完成的必要工作」：每格 0–4 由你给，引擎只产证据、算算术、出结论。'
+      + '**不传 cells 时十二格全部未评、综合分不出**，报告只出证据线索 —— 这是刻意的，'
+      + '让引擎自己给分就会重演"字段齐全=高分"。'
+      + '⚠️ 每条扣分须过四条件闸（当前阶段必须完成／属提交者职责／全文确未完成／影响当前决定），'
+      + '未过闸的扣分只降级为建议。判的是"这份文件能不能用"，不鉴定作者。',
     parameters: {
       text: { type: 'string', required: true, description: '要分析的文本（原始内容，不要预先总结）' },
       docType: {
@@ -236,6 +327,29 @@ export function apply(ctx, config = {}) {
           + '本插件**不自己拆义务** —— 从文档倒推的义务表＝最佳实践清单，会把任务缺口洗成"已满足"。'
           + '字段同 slop_obligation_audit。',
       },
+      review: {
+        type: 'string',
+        description: '**评审记录（必须）**：先 slop_prepare 拿规程与 docId，通读全文后按 reviewSchema 提交。'
+          + '字段：basis / docId / coverage / understanding{claims,done,open} / cells[...] / gaps / pending。'
+          + '硬约束：understanding 为空 → 不出分（先述后判）；每格 rated 至少一条能在原文逐字找到的引文；'
+          + 'score<10 必须四条件齐全，否则该格退回重判；docId 不符 → 旧评审不能套用到新版本。',
+      },
+      cells: {
+        type: 'string',
+        description: '（兼容旧路径）十二格 JSON 数组。会被包装成只带 cells 的 review，同样要过校验 ——'
+          + '没有理解摘要、没有引文，一样不出分。新调用请用 review。',
+      },
+      gaps: {
+        type: 'string',
+        description: '缺口清单 JSON 数组：{"cell":"E2","affects":"direction|local","work":"会卡住的那件事"}。'
+          + 'affects=direction 表示核心方向要重选（→ 重新形成相关方案）；local 表示局部安排不足（→ 补充相关部分）。'
+          + '推进结论按它决定，**不按最低分换算**。',
+      },
+      pending: {
+        type: 'string',
+        description: '待确认清单 JSON 数组：{"label":"协议附件是否随文","blocks":false}。'
+          + 'blocks=true 表示该未知会翻转判定 → **综合分不出**（不给区间，也不给"若…则 X 分"）。',
+      },
       format: { type: 'string', description: 'markdown（默认，出完整报告）/ json（只要结构化数据）' },
     },
     output: textOutput,
@@ -251,6 +365,10 @@ export function apply(ctx, config = {}) {
           level: args.level ?? 'summary',
           task: args.task,
           obligations: parseObligationsArg(args.obligations),
+          review: parseJsonObjectArg(args.review, 'review'),
+          cells: parseJsonArrayArg(args.cells, 'cells'),
+          gaps: parseJsonArrayArg(args.gaps, 'gaps'),
+          pending: parseJsonArrayArg(args.pending, 'pending'),
           source: 'tool-text',
           config,
         })
@@ -285,6 +403,16 @@ export function apply(ctx, config = {}) {
         type: 'string',
         description: '义务表 JSON 数组（或 {"obligations":[...]} 包装），由你按任务拆出。本插件不自己拆义务。',
       },
+      review: {
+        type: 'string',
+        description: '**评审记录（必须）**：先 slop_prepare 拿规程与 docId，通读全文后按 reviewSchema 提交（字段同 slop_audit_text 的 review）。',
+      },
+      cells: {
+        type: 'string',
+        description: '（兼容旧路径）十二格 JSON 数组，会被包装成只带 cells 的 review，同样要过校验。新调用请用 review。',
+      },
+      gaps: { type: 'string', description: '缺口清单 JSON 数组：{"cell","affects":"direction|local","work"}。' },
+      pending: { type: 'string', description: '待确认清单 JSON 数组：{"label","blocks"}；blocks=true 时综合分不出。' },
       format: { type: 'string', description: 'markdown（默认）/ json' },
     },
     output: textOutput,
@@ -299,6 +427,10 @@ export function apply(ctx, config = {}) {
           level: args.level ?? 'summary',
           task: args.task,
           obligations: parseObligationsArg(args.obligations),
+          review: parseJsonObjectArg(args.review, 'review'),
+          cells: parseJsonArrayArg(args.cells, 'cells'),
+          gaps: parseJsonArrayArg(args.gaps, 'gaps'),
+          pending: parseJsonArrayArg(args.pending, 'pending'),
           source: 'tool-file',
           config,
         })
@@ -461,15 +593,108 @@ export function apply(ctx, config = {}) {
     },
   }))
 
+  // ── ⑦ 评审准备（0.7.0 的入口）──────────────────────────────────────────
+  //
+  // ★ 这一步是"引导"落地的地方，不是可选的便利功能。
+  //   它交付的是**判定规程**：该问自己哪 12 个问题、每档长什么样、什么才算证据、
+  //   什么理由不算数、交什么格式。没有它，每个模型会各自发明一套问法 ——
+  //   分数就在不同人之间漂移，工具也就失去了意义。
+  //
+  // ★ 它**不产出任何分数**。分数只能来自读完这份文件之后的判定。
+  ctx.tools.register(defineTool({
+    name: 'slop_prepare',
+    description: '评审准备：登记原文（算出 docId）＋ 结构图（章节/表行/行号）＋ 分段读取计划'
+      + '＋ **12 格判定规程**（每格问什么、4 档怎么判、要什么证据、什么理由不算）＋ 六条协议 ＋ review 输出结构。'
+      + '**本工具不出分。** 正确用法：先调它 → 通读全文 → 按 reviewSchema 提交 review → 再调 slop_audit_*。'
+      + '原文一改，docId 就变，旧 review 会被拒绝套用 —— 这是为了防"旧评审被用在新闻版本上"。',
+    parameters: {
+      path: { type: 'string', description: '原文文件路径（须在配置的 inputRoots 内）。与 text 二选一。' },
+      text: { type: 'string', description: '原文全文。与 path 二选一。' },
+      task: { type: 'string', description: '原始任务原话（可选）。给了才能判"任务承接"；不给则 review 的 basis 只能填 none。' },
+    },
+    output: textOutput,
+    async execute(args) {
+      try {
+        const loaded = await loadDocText(args)
+        const docText = loaded.docText
+        const lines = docText.split('\n')
+        const totalLines = lines.length
+
+        const sections = []
+        lines.forEach((line, index) => {
+          const matched = /^#{1,6}\s+(.+)$/u.exec(line)
+          if (matched !== null) sections.push({ line: index + 1, title: matched[1].trim().slice(0, 80) })
+        })
+
+        const tableRows = []
+        lines.forEach((line, index) => {
+          if (tableRows.length >= 40) return
+          if (!/^\s*\|.*\|\s*$/u.test(line)) return
+          if (/^\s*\|[\s:|-]+\|\s*$/u.test(line)) return
+          tableRows.push({
+            line: index + 1,
+            cells: line.split('|').slice(1, -1).map(cell => cell.trim()).slice(0, 8),
+          })
+        })
+
+        const segmentSize = Math.max(60, Math.ceil(totalLines / 8))
+        const segments = []
+        for (let from = 1; from <= totalLines; from += segmentSize) {
+          segments.push({ from, to: Math.min(totalLines, from + segmentSize - 1) })
+        }
+
+        return json({
+          ok: true,
+          docId: docIdOf(docText),
+          file: { chars: docText.length, lines: totalLines, sourceMode: loaded.sourceMode, taskProvided: typeof args.task === 'string' && args.task.trim() !== '' },
+          structure: {
+            sections,
+            tableRows,
+            sectionCount: sections.length,
+            tableRowCount: tableRows.length,
+          },
+          readPlan: {
+            segments,
+            note: '长文必须逐段读完再合并理解 —— 不得只读结构图，不得只读命中片段。'
+              + '读完把各段要点填进 review.coverage（[{from,to,note}]）：它用来检查有没有漏读，'
+              + '但请注意，引文集中在开头**不能**证明"只读了开头"，分布均匀也**不能**证明"读懂了"。',
+          },
+          rubric: rubricFull(),
+          protocol: PROTOCOL,
+          reviewSchema: REVIEW_SCHEMA,
+          next: '通读全文后按 reviewSchema 提交 review，调用 slop_audit_text({text, review}) 或 slop_audit_file({path, review})',
+        })
+      } catch (error) {
+        return fail(error)
+      }
+    },
+  }))
+
   // 设置面板的 RPC 端点。
   //
   // ★ 必须 scoped 注入，不能写进顶层 inject：
   //   `connection` 只存在于 web 平面。写进 inject = ['tools','connection'] 会让本插件在
   //   headless / tui profile 里永远停在 inactive —— 连 4 个 slop_* 工具一起消失。
   //   ctx.inject(['connection'], cb) 是"可选依赖"语义：有服务就执行，没有就静默跳过。
+  // 「生成评审」靠 llm 服务；它是**可选**依赖 —— headless 或未加载模型的 profile 里没有它，
+  // 那样面板退回"只体检、不评审"，工具侧完全不受影响。
+  // 用 holder 而不是闭包常量，是因为 llm 可能在 RPC 注册之后才被加载。
+  const llmHolder = { current: undefined }
+  ctx.inject(['llm'], llmCtx => {
+    llmHolder.current = llmCtx.llm
+    llmCtx.effect(function* () {
+      yield () => { llmHolder.current = undefined }
+    }, 'kill-ai-slop llm')
+  })
+
   let rpcState = { registered: false, reason: '等待 connection 服务（仅 web 平面存在）' }
   ctx.inject(['connection'], rpcCtx => {
-    const disposeRpc = registerSlopRpc(rpcCtx, { config, logger: ctx.logger, recent })
+    const disposeRpc = registerSlopRpc(rpcCtx, {
+      config,
+      logger: ctx.logger,
+      recent,
+      getLlm: () => llmHolder.current,
+    })
     rpcState = typeof disposeRpc === 'function'
       ? { registered: true, reason: 'ok', endpoint: '/api/dsh-kill-ai-slop' }
       : { registered: false, reason: 'connection.fetch.register 不可用' }
@@ -478,7 +703,7 @@ export function apply(ctx, config = {}) {
     }, 'kill-ai-slop rpc endpoint')
   })
 
-  ctx.logger?.info?.('[kill-ai-slop] 已注册 6 个工具（slop_engine_info / slop_audit_text / slop_audit_file / slop_distill'
+  ctx.logger?.info?.('[kill-ai-slop] 已注册 7 个工具（slop_engine_info / slop_prepare / slop_audit_text / slop_audit_file / slop_distill'
     + ' / slop_obligation_audit / slop_verify_quotes）'
     + `；inputRoots=${Array.isArray(config.inputRoots) && config.inputRoots.length > 0 ? '已配置' : '未配置（宿主文件读取关闭）'}`
     + `；includeSnippets=${config.includeSnippets !== false}`)

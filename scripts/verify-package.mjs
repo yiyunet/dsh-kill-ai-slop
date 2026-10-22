@@ -53,7 +53,7 @@ async function readJson(relativePath) {
 }
 
 /* ── ① 必需文件 ─────────────────────────────────────────────────────── */
-const HOST_SOURCES = ['index.mjs', 'audit.mjs', 'parse.mjs', 'rules.mjs', 'score.mjs', 'distill.mjs', 'text.mjs', 'rpc.mjs', 'obligations.mjs']
+const HOST_SOURCES = ['index.mjs', 'audit.mjs', 'parse.mjs', 'rules.mjs', 'score.mjs', 'layers.mjs', 'rubric.mjs', 'review.mjs', 'reviewer.mjs', 'advice.mjs', 'distill.mjs', 'text.mjs', 'rpc.mjs', 'obligations.mjs']
 const REQUIRED = [
   'lib/index.mjs',
   'lib/client.js',
@@ -143,6 +143,19 @@ if (clientBundle === undefined) {
   if (clientSource !== undefined) {
     check(containsMarker(clientSource, 'dimension.counts'),
       'impl.mjs 未读宿主给的 dimension.counts —— 面板会自己判 state，与 markdown 漂成两个说法')
+    // ★ 执行（C）/ 决策（D）的扣分依据只准读宿主算好的 layerEvidence。
+    //   这两层不按维度拆、客户端也没有它们的原始数据；一旦客户端自己拼一句"扣在哪"，
+    //   就又回到"首页一个数字、证据页另一套说法"的老路上。
+    check(containsMarker(clientSource, 'observable.layerEvidence'),
+      'impl.mjs 未读 observable.layerEvidence —— 执行/决策两个数字在证据页会找不到账本')
+    // ★ 0.5.x：四层十二格只准读宿主算好的 report.layers。
+    //   0.5.0 的实测教训：宿主已经算好了四层，面板却还在印旧的表达/执行/决策三个数 ——
+    //   用户看到的第一屏里，"新维度框架"根本没有出现。客户端没有单测，这道只能在这里守。
+    check(containsMarker(clientSource, 'report.layers'),
+      'impl.mjs 未读宿主给的 report.layers —— 面板会自己拼四层，与报告 markdown 漂成两个说法')
+    // 面板四层的显示顺序是有意指定的（表达 → 策略 → 执行 → 意图），不是模型顺序。
+    check(containsMarker(clientSource, 'PANEL_LAYER_ORDER'),
+      'impl.mjs 未声明 PANEL_LAYER_ORDER —— 四层顺序散落在各处会各自漂移')
   }
 
   // 交叉验证：源码里有、产物里没有 ⇒ 产物过期
@@ -222,12 +235,21 @@ const INTERNAL_VOCAB = [
   { pattern: /技术部|封神榜/u, label: '内部组织名称' },
   { pattern: /最终决策权在|请老板|向老板/u, label: '内部汇报关系用语' },
   { pattern: /钉钉|dingtalk/iu, label: '内部相邻系统名' },
-  { pattern: /热成像|声成像|跨境电商|FOTRIC/iu, label: '内部业务域词（产品线 / 行业 / 品牌）' },
+  // ★ 0.7.15：业务域词表**不写在这个文件里** —— 本文件会随 GitHub 与 npm 包公开，
+  //   把"哪几个词算内部业务"写进来，等于把词表本身泄漏出去（防泄漏机制不得自我泄漏）。
+  //   改成从环境变量挂入：未设置则整条跳过，CI 永不接触这些词。
+  //   本地发布前自检：$env:DSH_PRIVATE_TERMS="产品线A|品牌B"; npm run verify
   { pattern: /\b[EF]\s?档/u, label: '内部档位行话' },
   { pattern: /约束\s*\d|第\s*\d\s*条约束/u, label: '悬空条款编号（读者无法解析，但暴露"存在编号体系"）' },
 ]
 
 const VOCAB_EXEMPT = 'scripts/verify-package.mjs'
+
+// 外置私有词表：留空即跳过。词表绝不进仓库、不进发布包。
+const PRIVATE_TERMS = (process.env.DSH_PRIVATE_TERMS ?? '').trim()
+if (PRIVATE_TERMS !== '') {
+  INTERNAL_VOCAB.push({ pattern: new RegExp(PRIVATE_TERMS, 'iu'), label: '外部私有词表（DSH_PRIVATE_TERMS）' })
+}
 
 for (const relativePath of SCAN_FILES) {
   const text = await readIfExists(relativePath)
@@ -382,5 +404,5 @@ if (failures.length > 0) {
 }
 
 console.log('✓ 发布契约校验通过')
-console.log('  必需文件 · 依赖禁则 · 零运行时依赖 · 装载器 id · 面板契约（settings.section / order 23 / AI垃圾过滤 / counts 单一来源）')
+console.log('  必需文件 · 依赖禁则 · 零运行时依赖 · 装载器 id · 面板契约（settings.section / order 23 / AI垃圾过滤 / counts 单一来源 / layerEvidence 单一来源 / report.layers 单一来源 / PANEL_LAYER_ORDER）')
 console.log('  产物无 ESM 语法 · RPC 端点三处一致 · 敏感信息 + 内部词汇 · 发布白名单自洽 · 版本一致 · 产物与源码同版 · 测试清单一致 · 零联网')

@@ -62,6 +62,26 @@ test('说明类文档退出 B6（执行完整性），避免体裁误伤', () =>
   assert.equal(pick(evaluation, 'B6').state, 'not-applicable')
 })
 
+test('英文的 shall / within N days 被认成责任人与期限标记', () => {
+  // 0.3.11 实测：一份《经销商协议》里「Distributor shall deliver … within 60 days」
+  // 被判成「责任人与期限均未说明」—— 两样都明明写在句子里。
+  // 词表漏一类写法，工具给的不是"我不知道"，而是一个**确定的错误判断**。
+  const evaluation = evaluateAll(
+    'Distributor shall deliver valid automotive field test cases within 60 days of goods receipt.',
+    { docType: 'proposal' },
+  )
+  const b6 = pick(evaluation, 'B6')
+  const rules = b6.hits.map(hit => hit.rule)
+  assert.equal(rules.includes('B6-缺责任人'), false, `实际命中：${JSON.stringify(rules)}`)
+  assert.equal(rules.includes('B6-缺期限'), false, `实际命中：${JSON.stringify(rules)}`)
+})
+
+test('中文「N 天内」也是期限标记', () => {
+  const evaluation = evaluateAll('业务部负责在收货后 60 天内提交复盘材料。', { docType: 'plan' })
+  const b6 = pick(evaluation, 'B6')
+  assert.equal(b6.hits.map(hit => hit.rule).includes('B6-缺期限'), false)
+})
+
 test('正文段落不足 3 段时 A5 不适用（而不是判 0 分）', () => {
   // 旧口径是"全文既无标题也无列表"；现在 A5 判的是段与段的关系，
   // 段落不够就无从谈起 —— 不适用 ≠ 没问题，这是本插件最在意的一条区分。
@@ -316,7 +336,7 @@ test('段间既无承接词也无共同实词时抓出并排堆放，证据最�
   // 顺序可以任意对调，说明是并排堆放而不是推进。
   const text = [
     '华南区的三家经销商在三月完成了首批铺货，覆盖二十三家门店，回款周期平均四十五天，比去年缩短了九天。',
-    '一台热成像模块的裸机采购成本是二百八十元，包装与说明书再加十六元，海运摊到每台七元，关税另算。',
+    '一台工业测温模块的裸机采购成本是二百八十元，包装与说明书再加十六元，海运摊到每台七元，关税另算。',
     '客服团队目前是四个人，旺季每天接一百二十通电话，平均每通七分钟，加人要先算清排班与培训成本。',
     '包装设计稿前后改了四版，最后一版把参数表挪到背面，正面只留品牌名和一句用途说明。',
     '东莞的仓库月租四万二千元，能放三千台整机，旺季之前需要再租一个临时库位，租金按季付。',
@@ -345,7 +365,7 @@ test('会议纪要与通知不判段间推进（体裁豁免）', () => {
   // 四段互不相干的并列事项 —— 用默认类型会判"并排堆放"，纪要 / 通知下不判。
   const text = [
     '华南区的三家经销商在三月完成了首批铺货，覆盖二十三家门店，回款周期平均四十五天，比去年缩短了九天。',
-    '一台热成像模块的裸机采购成本是二百八十元，包装与说明书再加十六元，海运摊到每台七元，关税另算。',
+    '一台工业测温模块的裸机采购成本是二百八十元，包装与说明书再加十六元，海运摊到每台七元，关税另算。',
     '客服团队目前是四个人，旺季每天接一百二十通电话，平均每通七分钟，加人要先算清排班与培训成本。',
     '包装设计稿前后改了四版，最后一版把参数表挪到背面，正面只留品牌名和一句用途说明。',
   ].join('\n\n')

@@ -16,12 +16,29 @@
 >
 > | Item | State |
 > |---|---|
-> | Source | ✅ implemented (9 host modules + 2 client modules + 4 scripts + 5 test files) |
-> | `npm run build` / `test` / `verify` | ✅ **120 / 120 tests pass**; release-contract check passes |
-> | Running inside DSH | ✅ **yes** — settings panel opens, 6 tools registered, text input verified end-to-end |
-> | npm publish | ✅ **published** — `@yiyunet/dsh-kill-ai-slop` |
+> | Source | ✅ implemented (10 host modules + 2 client modules + 4 scripts + 6 test files) |
+> | `npm run build` / `test` / `verify` | ✅ **180 / 180 tests pass**; release-contract check passes; `lib/` matches source |
+> | Running inside DSH | ✅ at 0.3.11 — settings panel opens, 6 tools registered, text input verified end-to-end |
+> | npm publish | ✅ `@yiyunet/dsh-kill-ai-slop` |
+> | **Settings panel UI** | ⚠️ still the old single-index view — the four layers are available via the report markdown, tool params and RPC; the panel form is planned for 0.5.1 |
 >
 > Proven: the code is internally consistent, the release shape is complete, and the **host contract holds**.
+>
+> ### 🚨 0.5.0 is a breaking change: the score direction flipped
+>
+> | | 0.3.x | 0.5.x |
+> |---|---|---|
+> | Meaning | **higher = worse** (100 = pure slop) | **higher = better** (100 = this stage's required work is done) |
+> | Layers | expression 20% / execution 40% / decision 40% | intent 20% / strategy 35% / execution 35% / expression 10% |
+> | Who scores | the engine computed severity from word lists | **a human/agent supplies 0–4**; the engine only produces evidence, does the arithmetic, and draws the conclusion |
+>
+> **Scores are not comparable across versions.** Never display them side by side without the direction caveat.
+>
+> The new model asks four questions: *What task was taken on? What choices were made?
+> How is it going to be carried out? Can the reader actually use it?*
+> The unit of judgment is **unfinished required work**, and every deduction must pass a four-condition gate
+> (required this stage / the submitter's job or their job to prepare the input / genuinely not done in the whole document /
+> affects a current decision or action). Deductions that fail the gate are demoted to suggestions, never deleted.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "@yiyunet/dsh-kill-ai-slop",
-  "version": "0.3.10",
-  "description": "DSH 插件：AI垃圾过滤（Kill AI Slop）——给收到的文件打一个可回溯的体检得分（表达／执行／决策三维加权），用交付承接台账审查工作空转，每条引文回原文机器复核。零依赖、零联网、纯本地计算。Score a document for AI-slop and work-slop with a quote-verified obligation ledger.",
+  "version": "0.7.15",
+  "description": "DSH 插件：AI垃圾过滤（Kill AI Slop）——用四层十二格（意图／策略／执行／表达，权重 20/35/35/10）识别「看起来交付了，实际上还剩哪些工作没完成」，每条扣分须过四条件闸，引文回原文机器复核。零依赖、零联网、纯本地计算。Score a document by how much unfinished required work it leaves to the reader.",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -96,7 +96,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test test/text.test.mjs test/parse.test.mjs test/rules-score.test.mjs test/distill-audit.test.mjs test/obligations.test.mjs",
+    "test": "node --test test/text.test.mjs test/parse.test.mjs test/rules-score.test.mjs test/layers.test.mjs test/review.test.mjs test/reviewer.test.mjs test/distill-audit.test.mjs test/obligations.test.mjs",
     "verify": "node scripts/verify-package.mjs",
     "doctor": "node scripts/doctor.mjs",
     "check": "npm run build && npm test && npm run verify",

@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { audit, renderAuditMarkdown } from '../plugin-src/host/audit.mjs'
+import { audit as auditRaw, renderAuditMarkdown } from '../plugin-src/host/audit.mjs'
 import { LEVELS, distill, renderDistillMarkdown } from '../plugin-src/host/distill.mjs'
+
+/**
+ * 本文件测的是 0.3.x 旧章节（表达指数 A／三指数判断／逐维观测／五要素／复现信息）与台账的内部一致性。
+ * 0.7.1 起这些章节**默认不渲染**（与四层分方向相反，同屏会被读反），所以这里显式打开 ——
+ * 这样测的仍然是旧引擎本身，不会因为默认值变了就整片失效。
+ */
+const audit = input => auditRaw({ legacySections: true, ...input })
 
 const SAMPLE = [
   '# Q4 渠道调整方案',
@@ -526,4 +533,82 @@ test('B 维度不计分：状态列写"线索 · 不计分"，严重度列必须
   // 反向守卫：不能靠"把严重度列一律抹成 —"过关。
   assert.ok(report.dimensions.some(item => item.counts),
     '至少要有一个真正计分的维度，否则"全是 —"也能通过上面那条')
+})
+
+/* ──────────────── 0.3.11：归属分层（对方义务 vs 对读者的要求） ──────────────── */
+
+// 老板 0.3.11 反馈（提炼 · ⑥ 执行）：「责任人与期限均未说明这种没有区分
+// 哪些是汇报人要做的，哪些是汇报人阐述的内容」。
+// 这份样本就是当时那张截图的形状：一份经销合作协议，通篇是对方义务。
+const CONTRACT = [
+  '# 经销合作协议',
+  '',
+  '1. 经销商需在收货后 60 天内，提交 3 组汽修现场实测素材。',
+  '',
+  '2. Distributor shall deliver valid automotive field test cases within 60 days of goods receipt.',
+  '',
+  '3. Shipping cost borne by Distributor.',
+  '',
+  '4. 适用对象：汽修垂直平台，仅负责上架、销售、售后，无案例提交义务。',
+].join('\n')
+
+test('合同条款里的对方义务不再被判「责任人与期限均未说明」', () => {
+  const result = distill(CONTRACT)
+  const items = result.elements.actions.items
+  assert.ok(items.length >= 2, `应抽到 2 条义务，实际 ${JSON.stringify(items.map(i => i.action))}`)
+
+  const zh = items.find(item => item.action.includes('经销商需在收货后'))
+  assert.equal(zh.party, 'other', '「经销商需…」的责任人是条款主语，不是"未说明"')
+  assert.equal(zh.owner, '经销商')
+  assert.match(zh.due, /60\s*天内/u, '「收货后 60 天内」必须被认成期限，原先整类写法都没收录')
+  assert.equal(zh.gap, false)
+
+  // ⚠️ 用 includes 不用 startsWith：切句器把编号 `2.` 留在句首（它只排除「2.」是句界，
+  //    不把编号剥掉 —— 剥掉就不再是原文连续片段，偏移也回不去了）。
+  const en = items.find(item => item.action.includes('Distributor shall deliver'))
+  assert.equal(en.party, 'other')
+  assert.match(en.due, /within\s+60\s+days/iu, '「within 60 days」必须被认成期限')
+  assert.equal(en.gap, false)
+  assert.match(en.status, /^对方义务 · Distributor/u)
+})
+
+test('否定式义务与费用条款不是"待办"', () => {
+  const items = distill(CONTRACT).elements.actions.items
+  assert.ok(!items.some(item => item.action.includes('无案例提交义务')),
+    '「无案例提交义务」是一条职责边界，不是要做提交这件事')
+  assert.ok(!items.some(item => item.action.includes('Shipping cost borne by')),
+    '「Shipping cost borne by Distributor」是费用归属条款；英文动词没词边界时 ship 会命中 Shipping')
+})
+
+test('全篇都是对方义务时，执行层不出分而不是判 100', () => {
+  const report = audit({ buffer: Buffer.from(CONTRACT, 'utf8'), filename: '合同.md', docType: 'generic' })
+  assert.equal(report.observable.counted.judgeable, 0, '没有需要判缺项的动作项')
+  assert.ok(report.observable.counted.obligations >= 2)
+  // 分母为空 → 不出分。这是"我没法判"，不是"0 分（判过了没问题）"。
+  assert.equal(report.observable.executionGap, null, '不能因为没有我方动作就判 100 —— 那是把体裁当缺陷')
+  const c = report.observable.layerEvidence.find(layer => layer.key === 'C')
+  assert.equal(c.value, null)
+  assert.match(c.basis, /对方义务/u)
+})
+
+test('对读者的要求仍然照罚 —— 归属分层不能变成全面放过', () => {
+  const report = audit({ buffer: Buffer.from('请在下周前提交修订稿，并同步给全组。', 'utf8'), filename: 'a.txt', docType: 'plan' })
+  assert.ok(report.observable.counted.judgeable >= 1, '对读者的要求必须进"要判缺项"的那一组')
+  assert.equal(report.observable.executionGap, 100, '没有主语、也没写谁做 —— 这正是该罚的那种')
+})
+
+/* ──────────────── 0.3.11：执行 / 决策 的扣分依据要能在证据页找到 ──────────────── */
+
+test('layerEvidence 逐一交代执行与决策的扣分项，且带行号', () => {
+  const report = audit({ buffer: Buffer.from(CONTRACT, 'utf8'), filename: '合同.md', docType: 'generic' })
+  const keys = report.observable.layerEvidence.map(layer => layer.key)
+  assert.deepEqual(keys, ['C', 'D'], '表达由逐维表承载，这两层必须自己摊开')
+
+  const d = report.observable.layerEvidence.find(layer => layer.key === 'D')
+  assert.ok(d.items.some(item => item.missing === '目的未明示'), '目的未明示是决策层的一项扣分，必须列出')
+  assert.match(d.basis, /÷\s*\(\d+\+2\)/u, '分母怎么拼出来的要写给人看，否则数字无法复核')
+
+  // 报告正文也要有，否则面板有、Markdown 没有，又变成两套说法。
+  assert.match(report.markdown, /### 执行 \/ 决策 的扣分依据/u)
+  assert.match(report.markdown, /目的未明示/u)
 })
