@@ -1,0 +1,63 @@
+name: 报告问题 / Bug report
+description: 插件出错、不工作，或者和说明不一致 / Something is broken or not working as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 谢谢反馈！中文、英文都行。/ Thanks for the report! Chinese or English is fine.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 你做了什么、看到了什么、本来应该怎样 / What you did, what you saw, what you expected
+    validations:
+      required: true
+
+  # 体检工具出错有两种很不同的情况：一条结论都没有，或结论有但判断不合理。
+  # 分开报能省一轮来回，所以这里单列一栏。
+  - type: dropdown
+    id: where
+    attributes:
+      label: 哪一类问题 / Which kind
+      description: 不确定就留空 / Leave blank if unsure
+      multiple: false
+      options:
+        - 一条结论都出不来（读不到 / 解析失败 / 报错）
+        - 结论出来了，但判断不合理（分数与原文对不上、该报的没报）
+        - 分数刻度或权重不对
+        - 文档类型判定不对（该按提案判却按报告判了）
+        - 五要素提炼不对（漏了该保留的数字 / 责任人 / 条件）
+        - 脱敏没生效（输出里带出了原文里的敏感信息）
+        - 安装 / 配置项
+        - 不算某一项（文档、其他）/ other
+
+  - type: input
+    id: versions
+    attributes:
+      label: 版本 / Versions
+      description: DSH 版本和插件版本，DSH 侧栏的插件页能看到 / DSH and plugin versions, shown on the DSH Plugins page
+      placeholder: DSH 0.2.1-rc.1, plugin 0.7.16
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 系统 / OS
+      placeholder: Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 相关片段或截图 / Snippets or screenshots
+      description: |
+        可选。判断不合理那类问题，最有用的是一条**能在原文里逐字找到的**被误判句子，
+        加上插件给的分数。
+        **贴之前先删掉正文里的隐私与密钥** —— 体检工具处理的是别人的文档，
+        贴全文常常比贴片段风险大。
+        / Optional. For scoring disputes the most useful thing is one verdict plus the exact
+        sentence in the source. **Remove private info and keys before pasting** —
+        this tool reads other people's documents, so full text is riskier than excerpts.

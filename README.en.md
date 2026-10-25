@@ -226,6 +226,17 @@ Maintainers: read the "five design decisions you should not casually change" sec
 
 ---
 
+## Feedback
+
+Found a problem or want a new feature? [Open an issue](https://github.com/yiyunet/dsh-kill-ai-slop/issues/new/choose).
+Include the **DSH version** and the **plugin version** — that makes a fix much faster.
+
+For "the verdict is wrong", the most useful thing is **the exact sentence from the source** plus the score
+the plugin gave. **Remove private info and keys before pasting** — this tool reads other people's documents,
+so full text is usually riskier than an excerpt.
+
+---
+
 ## License
 
 [MIT](LICENSE). Methodology informed by `stop-slop`, `no-ai-slop` and `kill-ai-slop`;

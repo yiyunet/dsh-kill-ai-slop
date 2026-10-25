@@ -434,6 +434,16 @@ npm run check      # build + test + verify
 
 ---
 
+## 反馈
+
+遇到问题或想要新功能，[提一个 issue](https://github.com/yiyunet/dsh-kill-ai-slop/issues/new/choose)。
+报问题时写上 **DSH 版本**和**插件版本**，修起来最快。
+
+「结论不合理」那类问题，最有用的材料是**一条能在原文里逐字找到的**被误判句子 ＋ 插件给的分数。
+**贴之前请先删掉正文里的隐私与密钥** —— 这个工具读的是别人的文档，贴全文常常比贴片段风险大。
+
+---
+
 ## 许可
 
 [MIT](LICENSE)。

@@ -1,0 +1,13 @@
+# 新 issue 的入口页：两条「你可能先想看一眼」的指路 ＋ 允许开空白 issue。
+#
+# 为什么留 `blank_issues_enabled: true`：模板是**帮忙**，不是门槛。
+# 强制所有反馈都填表，只会把「用法问一句」的人挡在门外，或者逼他硬填一个 bug 模板。
+blank_issues_enabled: true
+
+contact_links:
+  - name: 用法与判据，先看 README
+    url: https://github.com/yiyunet/dsh-kill-ai-slop#readme
+    about: 判断单位、两个词、为什么不做「AI 率」、文档类型开关、报告长什么样 —— 都在 README 里 / The rubric, the two terms, why no "AI rate", doc-type switch, report shape
+  - name: yiyunet 的其他 DSH 插件 / More DSH plugins
+    url: https://github.com/yiyunet
+    about: 学习插件、钉钉连接、MCP 管理、出口代理 / Learning, DingTalk, MCP manager, egress proxy
