@@ -119,3 +119,58 @@ export function makeXlsx(rows) {
     { name: 'xl/worksheets/sheet1.xml', data: `<worksheet><sheetData>${sheetRows}</sheetData></worksheet>` },
   ])
 }
+
+/** 造一个最小可解析的 .odt（OpenDocument 文字）。 */
+export function makeOdt(paragraphs) {
+  const body = paragraphs.map(text => `<text:p>${text}</text:p>`).join('')
+  return storedZip([
+    { name: 'mimetype', data: 'application/vnd.oasis.opendocument.text' },
+    { name: 'content.xml', data: '<?xml version="1.0" encoding="UTF-8"?>'
+      + `<office:document-content><office:body><office:text>${body}</office:text></office:body></office:document-content>` },
+  ])
+}
+
+/**
+ * 造一个最小 OLE2（CFB）复合文档 —— 只有目录，没有真实流内容。
+ *
+ * 用途：验证"扩展名是 .docx，内容其实是 OLE2"这类**真实世界最常见的失败**能被
+ * 准确区分成「旧版 .doc」还是「设了打开密码的 docx」。两者对用户是完全不同的动作，
+ * 以前它们只有一个统一的报错：未找到中央目录。
+ */
+export function makeOle2(streamNames) {
+  const HEADER = 512
+  const SECTOR = 512
+  const buf = Buffer.alloc(HEADER + SECTOR * 3)
+
+  Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(buf, 0)
+  buf.writeUInt16LE(0x003e, 0x18)      // minor version
+  buf.writeUInt16LE(0x0003, 0x1a)      // major version
+  buf.writeUInt16LE(0xfffe, 0x1c)      // byte order
+  buf.writeUInt16LE(9, 0x1e)           // sector shift → 512 字节扇区
+  buf.writeUInt16LE(6, 0x20)           // mini sector shift
+  buf.writeUInt32LE(1, 0x2c)           // FAT 扇区数
+  buf.writeUInt32LE(1, 0x30)           // 目录首扇区 = 1
+  buf.writeUInt32LE(0xfffffffe, 0x3c)  // mini FAT 首扇区
+  buf.writeUInt32LE(0xfffffffe, 0x44)  // DIFAT 首扇区
+  buf.writeUInt32LE(0, 0x4c)           // DIFAT[0] = FAT 在扇区 0
+  for (let index = 1; index < 109; index += 1) buf.writeUInt32LE(0xffffffff, 0x4c + index * 4)
+
+  const sectorAt = sector => (sector + 1) * SECTOR
+
+  // FAT：扇区 0 是 FAT 自己，扇区 1（目录）是链尾
+  buf.writeUInt32LE(0xfffffffd, sectorAt(0))
+  buf.writeUInt32LE(0xfffffffe, sectorAt(0) + 4)
+
+  // 目录扇区：每项 128 字节
+  streamNames.forEach((name, index) => {
+    const at = sectorAt(1) + index * 128
+    const encoded = Buffer.from(name, 'utf16le')
+    encoded.copy(buf, at)
+    buf.writeUInt16LE(encoded.length + 2, at + 0x40)  // 名字长度（含结尾 NUL）
+    buf[at + 0x42] = 2                                 // 类型 2 = 流
+    buf.writeUInt32LE(0xffffffff, at + 0x74)           // 起始扇区
+    buf.writeUInt32LE(0, at + 0x78)                    // 大小
+  })
+
+  return buf
+}

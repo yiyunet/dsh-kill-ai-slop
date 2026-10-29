@@ -157,11 +157,25 @@ Nothing leaves the machine: the browser hands the bytes to the local DSH host pr
 | Format | How | Notes |
 |---|---|---|
 | `txt` `md` `csv` `json` `log` `yaml` `html` `rtf` | direct | UTF-8 / UTF-16 BOM first, GBK fallback |
-| `docx` `pptx` `xlsx` | own ZIP + OOXML reader | body text only; headers, footers, notes, embedded objects excluded (reported) |
+| `docx` `docm` `dotx` `pptx` `pptm` `xlsx` `xlsm` | own ZIP + OOXML reader | body text only; headers, footers, notes, embedded objects excluded (reported) |
+| `odt` `ods` `odp` | own ZIP + ODF reader | paragraphs only; table structure is flattened (reported) |
 | `pdf` | content-stream inflate + text operators | **heuristic**: no OCR, no font encoding maps |
-| `doc` `xls` `ppt`, archives, images, `eml` | unsupported | the error tells you how to re-export |
+| `doc` `xls` `ppt` | unsupported (legacy binary) | the error says "this is a legacy .doc — save as .docx" |
+| password-protected Office files | unsupported (OLE2 encryption container) | the error points straight at "remove the password" |
+| archives, images, `eml` `msg` | unsupported | the error gives you the next step |
+
+**The extension is not trusted; the content is.** Every upload is identified by magic bytes first:
+
+- a `.docx` that actually contains a spreadsheet / web page / plain text / PDF → **parsed by its real
+  format**, with an explicit "extension does not match content" note in the report;
+- a `.docx` that is really a legacy `.doc`, or a password-protected Office file → each gets **one**
+  concrete next action (re-save / remove the password);
+- starts like a ZIP but has no central directory, or is too short to be a complete container → treated
+  as a truncated download, not vaguely reported as "not a ZIP".
 
 **No OCR.** A scanned PDF yields "coverage insufficient" and **no total score**, rather than a fake one.
+Likewise a `docx` whose text lives entirely in images or text boxes (coverage 0) is refused — sending
+empty text to a reviewer only produces a well-formatted score for a blank page.
 
 ---
 
